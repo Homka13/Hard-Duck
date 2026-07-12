@@ -293,9 +293,11 @@ public static class Scripts
     /// <summary>Визначення щоденного користувача (власник explorer.exe). Повертає ім'я у summary або SKIP.</summary>
     public const string DetectDailyUser = Prolog + """
         function Main {
-            $builtinAdmin = (Get-LocalUser | Where-Object { $_.SID.Value -like '*-500' } | Select-Object -First 1).Name
             $excluded = @('Administrator','SYSTEM','DefaultAccount','Guest','WDAGUtilityAccount', "$env:COMPUTERNAME`$")
-            if ($builtinAdmin) { $excluded += $builtinAdmin }
+            try {
+                $builtinAdmin = (Get-LocalUser | Where-Object { $_.SID.Value -like '*-500' } | Select-Object -First 1).Name
+                if ($builtinAdmin) { $excluded += $builtinAdmin }
+            } catch { }
 
             $owners = @()
             try {
@@ -308,11 +310,23 @@ public static class Scripts
                 Emit 'OK' (@($owners)[0])
                 return
             }
-            $fallback = (Get-CimInstance Win32_ComputerSystem).UserName
-            if ($fallback) {
-                $name = $fallback.Split('\')[-1]
-                if ($excluded -notcontains $name) { Emit 'OK' $name; return }
-            }
+
+            try {
+                $fallback = (Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).UserName
+                if ($fallback) {
+                    $name = $fallback.Split('\')[-1]
+                    if ($excluded -notcontains $name) { Emit 'OK' $name; return }
+                }
+            } catch { }
+
+            try {
+                $lastLogon = Get-ItemPropertyValue -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\LogonUI' -Name 'LastLoggedOnUser' -ErrorAction Stop
+                if ($lastLogon) {
+                    $name = $lastLogon.Split('\')[-1]
+                    if ($excluded -notcontains $name) { Emit 'OK' $name; return }
+                }
+            } catch { }
+
             Emit 'SKIP' ''
         }
         Main
