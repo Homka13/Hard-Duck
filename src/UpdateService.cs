@@ -19,8 +19,8 @@ namespace HardenWorkstation;
 public static class UpdateService
 {
     // ЗАПОВНИТИ після створення репозиторію: github.com/{Owner}/{Repo}
-    public const string Owner = "YOUR-GITHUB-USER";
-    public const string Repo  = "harden-workstation";
+    public const string Owner = "Homka13";
+    public const string Repo  = "Hard-Duck";
 
     public sealed record UpdateInfo(Version Latest, string ExeUrl, string? ShaUrl, string ReleaseUrl);
 
