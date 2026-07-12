@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>WinExe</OutputType>
+    <TargetFramework>net8.0-windows</TargetFramework>
+    <UseWPF>true</UseWPF>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <LangVersion>latest</LangVersion>
+    <RootNamespace>HardenWorkstation</RootNamespace>
+    <AssemblyName>HardenWorkstation</AssemblyName>
+    <ApplicationManifest>app.manifest</ApplicationManifest>
+    <Version>1.0.0</Version>
+    <Product>Захист робочої станції</Product>
+    <Description>BitLocker (TPM+PIN), ескроу ключів в Entra ID, гібернація, BIOS-пароль (Lenovo), Windows LAPS</Description>
+  </PropertyGroup>
+
+</Project>

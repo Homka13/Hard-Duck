@@ -1,0 +1,13 @@
+# Build
+bin/
+obj/
+publish/
+
+# IDE
+.vs/
+.vscode/
+*.user
+*.suo
+
+# Локальні артефакти
+*.log
