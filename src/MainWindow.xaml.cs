@@ -246,7 +246,7 @@ public partial class MainWindow : Window
                     SetStage("AdminRemoved", StageStatus.Skip,
                         "SKIP - користувача не визначено однозначно, потрібна ручна перевірка ІТ");
                     report["AdminRemoved"] = "SKIP - користувача не визначено однозначно";
-                    Log("[!] Не вдалось однозначно визначити щоденного користувача — права НЕ знімаю.");
+                    Log($"[!] Не вдалось однозначно визначити щоденного користувача: {detect.Summary}");
                 }
             }
 

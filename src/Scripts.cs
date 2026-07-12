@@ -299,12 +299,16 @@ public static class Scripts
                 if ($builtinAdmin) { $excluded += $builtinAdmin }
             } catch { }
 
+            $debugInfo = "Excluded: $($excluded -join ','). "
+
             $owners = @()
             try {
                 $owners = Get-CimInstance Win32_Process -Filter "Name='explorer.exe'" -ErrorAction Stop |
                     ForEach-Object { (Invoke-CimMethod -InputObject $_ -MethodName GetOwner).User } |
                     Where-Object { $_ -and $excluded -notcontains $_ } | Select-Object -Unique
-            } catch { }
+            } catch { $debugInfo += "ProcErr: $($_.Exception.Message). " }
+
+            $debugInfo += "Explorers: $($owners -join ','). "
 
             if (@($owners).Count -eq 1) {
                 Emit 'OK' (@($owners)[0])
@@ -313,21 +317,28 @@ public static class Scripts
 
             try {
                 $fallback = (Get-CimInstance Win32_ComputerSystem -ErrorAction Stop).UserName
+                $debugInfo += "Win32CS: $fallback. "
                 if ($fallback) {
                     $name = $fallback.Split('\')[-1]
                     if ($excluded -notcontains $name) { Emit 'OK' $name; return }
                 }
-            } catch { }
+            } catch { $debugInfo += "CSErr: $($_.Exception.Message). " }
 
             try {
                 $lastLogon = Get-ItemPropertyValue -Path 'HKLM:\SOFTWARE\Microsoft\Windows\CurrentVersion\Authentication\LogonUI' -Name 'LastLoggedOnUser' -ErrorAction Stop
+                $debugInfo += "LogonUI: $lastLogon. "
                 if ($lastLogon) {
                     $name = $lastLogon.Split('\')[-1]
                     if ($excluded -notcontains $name) { Emit 'OK' $name; return }
                 }
+            } catch { $debugInfo += "RegErr: $($_.Exception.Message). " }
+
+            try {
+                $quser = quser.exe 2>$null | Out-String
+                $debugInfo += "quser: $($quser -replace '\r?\n','; '). "
             } catch { }
 
-            Emit 'SKIP' ''
+            Emit 'SKIP' $debugInfo
         }
         Main
         """;
