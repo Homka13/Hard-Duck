@@ -429,6 +429,55 @@ public static class Scripts
         Main
         """;
 
+    /// <summary>Сервісна дія: повне розблокування USB-накопичувачів (відкат етапу UsbStorage).</summary>
+    public const string UsbStorageUnblock = Prolog + """
+        function Main {
+            try {
+                Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\USBSTOR' -Name 'Start' -Value 3 -Type DWord
+                if (Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Services\UASPStor') {
+                    Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\UASPStor' -Name 'Start' -Value 3 -Type DWord
+                }
+                $base = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\RemovableStorageDevices'
+                if (Test-Path $base) { Remove-Item -Path $base -Recurse -Force }
+                Write-Output "[OK] USB-накопичувачі розблоковано: драйвери увімкнено, політики Removable Storage знято."
+                Write-Output "[i] Вже вставлену флешку перепідключіть (або перезавантажте машину)."
+                Emit 'OK' 'OK - USB розблоковано'
+            } catch {
+                Write-Output "[X] Помилка розблокування USB: $($_.Exception.Message)"
+                Emit 'FAIL' ("FAIL: " + $_.Exception.Message)
+            }
+        }
+        Main
+        """;
+
+    /// <summary>Сервісна дія: повернути користувачу права адміністратора. Ім'я через stdin.</summary>
+    public const string RestoreAdminRights = Prolog + """
+        function Main {
+            $user = [Console]::In.ReadLine()
+            if ([string]::IsNullOrWhiteSpace($user)) {
+                Emit 'SKIP' 'SKIP - користувача не передано'
+                return
+            }
+            try {
+                $group = Get-LocalGroup -SID 'S-1-5-32-544'
+                $already = Get-LocalGroupMember -Group $group -ErrorAction Stop |
+                    Where-Object { $_.Name -match ("\\" + [regex]::Escape($user) + "$") -or $_.Name -eq $user }
+                if ($already) {
+                    Write-Output "[OK] '$user' вже входить до групи адміністраторів."
+                    Emit 'SKIP' "SKIP - '$user' вже адміністратор"
+                    return
+                }
+                Add-LocalGroupMember -Group $group -Member $user -ErrorAction Stop
+                Write-Output "[OK] '$user' повернуто до групи адміністраторів. Зміна набуде чинності при наступному вході."
+                Emit 'OK' ("OK - права повернуто (" + $user + ")")
+            } catch {
+                Write-Output "[X] Не вдалось повернути права '$user': $($_.Exception.Message)"
+                Emit 'FAIL' ("FAIL: " + $_.Exception.Message)
+            }
+        }
+        Main
+        """;
+
     /// <summary>Зняття прав адміністратора. Ім'я користувача приходить через stdin.</summary>
     public const string RemoveAdminRights = Prolog + """
         function Main {

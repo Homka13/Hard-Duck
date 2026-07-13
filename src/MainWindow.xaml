@@ -106,6 +106,17 @@
             <TextBlock x:Name="BottomStatus" Grid.Column="0"
                        Foreground="#8A93A6" VerticalAlignment="Center" TextWrapping="Wrap"/>
             <StackPanel Grid.Column="1" Orientation="Horizontal">
+                <Button x:Name="ServiceButton" Content="Сервіс ▾"
+                        Width="100" Padding="0,8" Margin="0,0,10,0"
+                        Background="#232733" Foreground="#E8EAF0" BorderBrush="#3A4050"
+                        Click="OnServiceMenu">
+                    <Button.ContextMenu>
+                        <ContextMenu>
+                            <MenuItem Header="Розблокувати USB-накопичувачі" Click="OnUsbUnblock"/>
+                            <MenuItem Header="Повернути права адміністратора користувачу" Click="OnAdminRestore"/>
+                        </ContextMenu>
+                    </Button.ContextMenu>
+                </Button>
                 <Button x:Name="RebootButton" Content="Перезавантажити"
                         Width="140" Padding="0,8" Margin="0,0,10,0"
                         Background="#232733" Foreground="#E8EAF0" BorderBrush="#3A4050"

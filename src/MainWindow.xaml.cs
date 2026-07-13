@@ -285,6 +285,88 @@ public partial class MainWindow : Window
         }
     }
 
+    // ── Сервісні дії (відкат) — для ІТ, коли захист треба частково зняти ──
+
+    private void OnServiceMenu(object sender, RoutedEventArgs e)
+    {
+        if (sender is System.Windows.Controls.Button btn && btn.ContextMenu is not null)
+        {
+            btn.ContextMenu.PlacementTarget = btn;
+            btn.ContextMenu.IsOpen = true;
+        }
+    }
+
+    private async void OnUsbUnblock(object sender, RoutedEventArgs e)
+    {
+        var confirm = MessageBox.Show(this,
+            "Розблокувати USB-накопичувачі на цій машині?\n\n" +
+            "Флешки, зовнішні диски, SD-картки і телефони знову працюватимуть.",
+            "Розблокування USB", MessageBoxButton.YesNo, MessageBoxImage.Question);
+        if (confirm != MessageBoxResult.Yes) return;
+
+        RunButton.IsEnabled = false;
+        ServiceButton.IsEnabled = false;
+        try
+        {
+            Log("── Сервіс: розблокування USB-накопичувачів ──");
+            var r = await PowerShellRunner.RunAsync(Scripts.UsbStorageUnblock, onLogLine: Log);
+            SetStage("UsbStorage",
+                r.Status == "OK" ? StageStatus.Skip : StageStatus.Fail,
+                r.Status == "OK" ? "розблоковано (сервісна дія)" : r.Summary);
+            MessageBox.Show(this,
+                r.Status == "OK"
+                    ? "USB-накопичувачі розблоковано. Вставлену флешку перепідключіть."
+                    : "Не вдалось розблокувати: " + r.Summary,
+                "Розблокування USB", MessageBoxButton.OK,
+                r.Status == "OK" ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        }
+        finally
+        {
+            RunButton.IsEnabled = true;
+            ServiceButton.IsEnabled = true;
+        }
+    }
+
+    private async void OnAdminRestore(object sender, RoutedEventArgs e)
+    {
+        RunButton.IsEnabled = false;
+        ServiceButton.IsEnabled = false;
+        try
+        {
+            Log("── Сервіс: повернення прав адміністратора ──");
+            var detect = await PowerShellRunner.RunAsync(Scripts.DetectDailyUser, onLogLine: Log);
+            var user = detect.Status == "OK" ? detect.Summary : "";
+
+            if (string.IsNullOrWhiteSpace(user))
+            {
+                // Автовизначення не спрацювало — питаємо ім'я в оператора
+                var dlg = new UserNameDialog { Owner = this };
+                if (dlg.ShowDialog() != true) return;
+                user = dlg.UserName;
+            }
+            else
+            {
+                var confirm = MessageBox.Show(this,
+                    $"Повернути права адміністратора користувачу «{user}»?",
+                    "Повернення прав", MessageBoxButton.YesNo, MessageBoxImage.Question);
+                if (confirm != MessageBoxResult.Yes) return;
+            }
+
+            var r = await PowerShellRunner.RunAsync(Scripts.RestoreAdminRights, user, Log);
+            SetStage("AdminRemoved",
+                r.Status == "OK" ? StageStatus.Skip : MapStatus(r.Status),
+                r.Status == "OK" ? $"права повернуто ({user}) — сервісна дія" : r.Summary);
+            MessageBox.Show(this, r.FullLog.Trim().Length > 0 ? r.Summary : r.Summary,
+                "Повернення прав", MessageBoxButton.OK,
+                r.Status == "OK" || r.Status == "SKIP" ? MessageBoxImage.Information : MessageBoxImage.Warning);
+        }
+        finally
+        {
+            RunButton.IsEnabled = true;
+            ServiceButton.IsEnabled = true;
+        }
+    }
+
     private void OnReboot(object sender, RoutedEventArgs e)
     {
         var confirm = MessageBox.Show(this,
