@@ -1,3 +1,4 @@
+using System.IO;
 using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Windows;
@@ -21,7 +22,7 @@ public partial class MainWindow : Window
         AddStage("BitLockerKeyToEntra", "Recovery-ключ в Entra ID");
         AddStage("Hibernation", "Гібернація замість сну");
         AddStage("UsbStorage", "USB-накопичувачі заборонено");
-        AddStage("BiosPassword", "Пароль BIOS/UEFI (Lenovo)");
+        AddStage("BiosPassword", "Пароль BIOS/UEFI");
         AddStage("LAPS", "Windows LAPS");
         AddStage("AdminRemoved", "Права адміністратора користувача");
 
@@ -205,7 +206,11 @@ public partial class MainWindow : Window
                     report["UsbStorage"] = "SKIP - вимкнено оператором";
                 }
 
-                var bios = await RunStageAsync("BiosPassword", Scripts.BiosPassword);
+                var certPath = Path.Combine(
+                    Path.GetDirectoryName(Environment.ProcessPath) ?? AppContext.BaseDirectory,
+                    "bios-encrypt-public.cer");
+                var bios = await RunStageAsync("BiosPassword", Scripts.BiosPassword,
+                    File.Exists(certPath) ? certPath : "");
                 report["BiosPassword"] = bios.Summary;
 
                 if (LapsCheck.IsChecked == true)

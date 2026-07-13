@@ -175,26 +175,137 @@ public static class Scripts
         Main
         """;
 
+    /// <summary>
+    /// BIOS-пароль, мультивендорно. Через stdin приходить шлях до bios-encrypt-public.cer (або порожній рядок).
+    /// Lenovo: перший пароль лише вручну (обмеження прошивки) — чесна перевірка стану.
+    /// Dell/HP: генеруємо випадковий пароль, ставимо через вендорський WMI, шифруємо сертифікатом (CMS,
+    /// сумісно з tools/Decrypt-BiosPassword.ps1) і зберігаємо в C:\ProgramData\ITSecurity.
+    /// </summary>
     public const string BiosPassword = Prolog + """
+        $certPath = [Console]::In.ReadLine()
+
+        function New-BiosSafePassword {
+            # Тільки латиниця+цифри, без неоднозначних символів — безпечно для будь-якої BIOS-клавіатури
+            $chars = 'ABCDEFGHJKLMNPQRSTUVWXYZabcdefghjkmnpqrstuvwxyz23456789'
+            -join (1..14 | ForEach-Object { $chars[(Get-Random -Maximum $chars.Length)] })
+        }
+
+        function Save-Escrow([string]$pass) {
+            $serial = ((Get-CimInstance Win32_BIOS).SerialNumber -replace '[^\w\-]', '')
+            $dir = 'C:\ProgramData\ITSecurity'
+            New-Item -ItemType Directory -Path $dir -Force | Out-Null
+            $file = Join-Path $dir ("bios-{0}-{1}.txt" -f $env:COMPUTERNAME, $serial)
+            Protect-CmsMessage -To $certPath -Content $pass -OutFile $file
+            return $file
+        }
+
         function Main {
-            try {
-                $pw = Get-CimInstance -Namespace root\wmi -ClassName Lenovo_BiosPasswordSettings -ErrorAction Stop
-            } catch {
-                Write-Output "[!] Lenovo WMI-інтерфейс недоступний на цій машині (не Lenovo або стара прошивка)."
-                Write-Output "[!] Supervisor-пароль треба поставити вручну в BIOS."
-                Emit 'WARN' 'вручну - Lenovo WMI недоступний'
+            $vendor = (Get-CimInstance Win32_ComputerSystem).Manufacturer
+
+            # ── LENOVO ──────────────────────────────────────────────────────────────
+            if ($vendor -match 'Lenovo') {
+                try {
+                    $pw = Get-CimInstance -Namespace root\wmi -ClassName Lenovo_BiosPasswordSettings -ErrorAction Stop
+                } catch {
+                    Write-Output "[!] Lenovo WMI-інтерфейс недоступний — пароль перевірте/поставте вручну в BIOS."
+                    Emit 'WARN' 'вручну - Lenovo WMI недоступний'
+                    return
+                }
+                if ($pw.PasswordState -band 2) {
+                    Write-Output "[OK] Supervisor-пароль (pap) вже встановлено раніше."
+                    Emit 'SKIP' 'OK - вже встановлено'
+                } else {
+                    Write-Output "[!] Обмеження Lenovo: ПЕРШИЙ supervisor-пароль ставиться лише вручну:"
+                    Write-Output "[!] перезавантаження -> F1 -> Security -> Password -> Supervisor Password."
+                    Emit 'WARN' 'вручну - перший пароль лише через BIOS (обмеження Lenovo)'
+                }
                 return
             }
-            if ($pw.PasswordState -band 2) {
-                Write-Output "[OK] Supervisor-пароль (pap) вже встановлено раніше."
-                Emit 'SKIP' 'OK - вже встановлено'
-            } else {
-                Write-Output "[!] Supervisor-пароль ще не встановлено."
-                Write-Output "[!] Обмеження Lenovo: ПЕРШИЙ supervisor-пароль неможливо поставити програмно через WMI —"
-                Write-Output "[!] його треба один раз задати вручну: перезавантаження -> F1 -> Security -> Password -> Supervisor Password."
-                Write-Output "[i] Після ручного встановлення повторний запуск програми покаже тут OK."
-                Emit 'WARN' 'вручну - перший пароль лише через BIOS (обмеження Lenovo)'
+
+            # Для Dell/HP пароль генерується автоматично — без сертифіката його нікуди безпечно зберегти
+            $canEscrow = $certPath -and (Test-Path $certPath)
+
+            # ── DELL ────────────────────────────────────────────────────────────────
+            if ($vendor -match 'Dell') {
+                try {
+                    $po = Get-CimInstance -Namespace 'root\dcim\sysman\wmisecurity' -ClassName PasswordObject -ErrorAction Stop |
+                        Where-Object NameId -eq 'Admin'
+                } catch {
+                    Write-Output "[!] Dell WMI-інтерфейс (root\dcim\sysman\wmisecurity) недоступний — стара прошивка? Пароль вручну."
+                    Emit 'WARN' 'вручну - Dell WMI недоступний'
+                    return
+                }
+                if ($po.IsPasswordSet -eq 1) {
+                    Write-Output "[OK] Admin-пароль BIOS вже встановлено раніше."
+                    Emit 'SKIP' 'OK - вже встановлено'
+                    return
+                }
+                if (-not $canEscrow) {
+                    Write-Output "[!] Поруч з EXE немає bios-encrypt-public.cer — автогенерований пароль не було б куди безпечно зберегти."
+                    Write-Output "[i] Згенеруйте пару ключів (tools/Generate-BiosKey-GUI.ps1), покладіть .cer поруч з EXE і запустіть повторно."
+                    Emit 'WARN' 'вручну - немає сертифіката ескроу'
+                    return
+                }
+                $pass = New-BiosSafePassword
+                $si = Get-CimInstance -Namespace 'root\dcim\sysman\wmisecurity' -ClassName SecurityInterface
+                $r = Invoke-CimMethod -InputObject $si -MethodName SetnewPassword -Arguments @{
+                    NameId = 'Admin'; NewPassword = $pass; OldPassword = ''
+                    SecType = 0; SecHndCount = 0; SecHandle = @()
+                }
+                $code = if ($null -ne $r.Status) { $r.Status } elseif ($null -ne $r.ReturnValue) { $r.ReturnValue } else { -1 }
+                if ($code -eq 0) {
+                    $file = Save-Escrow $pass
+                    Write-Output "[OK] Admin-пароль BIOS встановлено (Dell WMI)."
+                    Write-Output "[i] Зашифрований пароль: $file — заберіть файл у vault, розшифровка через tools/Decrypt-BiosPassword.ps1."
+                    Emit 'OK' 'OK - встановлено, ескроу збережено'
+                } else {
+                    Write-Output "[X] Dell SetnewPassword повернув код $code."
+                    Emit 'FAIL' ("FAIL - Dell WMI код " + $code)
+                }
+                return
             }
+
+            # ── HP ──────────────────────────────────────────────────────────────────
+            if ($vendor -match 'HP|Hewlett') {
+                try {
+                    $setting = Get-CimInstance -Namespace 'root\hp\instrumentedBIOS' -ClassName HP_BIOSSetting -ErrorAction Stop |
+                        Where-Object Name -eq 'Setup Password'
+                } catch {
+                    Write-Output "[!] HP WMI-інтерфейс (root\hp\instrumentedBIOS) недоступний — стара прошивка? Пароль вручну."
+                    Emit 'WARN' 'вручну - HP WMI недоступний'
+                    return
+                }
+                if ($setting.IsSet -eq 1) {
+                    Write-Output "[OK] Setup-пароль BIOS вже встановлено раніше."
+                    Emit 'SKIP' 'OK - вже встановлено'
+                    return
+                }
+                if (-not $canEscrow) {
+                    Write-Output "[!] Поруч з EXE немає bios-encrypt-public.cer — автогенерований пароль не було б куди безпечно зберегти."
+                    Write-Output "[i] Згенеруйте пару ключів (tools/Generate-BiosKey-GUI.ps1), покладіть .cer поруч з EXE і запустіть повторно."
+                    Emit 'WARN' 'вручну - немає сертифіката ескроу'
+                    return
+                }
+                $pass = New-BiosSafePassword
+                $iface = Get-CimInstance -Namespace 'root\hp\instrumentedBIOS' -ClassName HP_BIOSSettingInterface
+                $r = Invoke-CimMethod -InputObject $iface -MethodName SetBIOSSetting -Arguments @{
+                    Name = 'Setup Password'; Value = ('<utf-16/>' + $pass); Password = '<utf-16/>'
+                }
+                if ($r.Return -eq 0) {
+                    $file = Save-Escrow $pass
+                    Write-Output "[OK] Setup-пароль BIOS встановлено (HP WMI)."
+                    Write-Output "[i] Зашифрований пароль: $file — заберіть файл у vault, розшифровка через tools/Decrypt-BiosPassword.ps1."
+                    Emit 'OK' 'OK - встановлено, ескроу збережено'
+                } else {
+                    Write-Output "[X] HP SetBIOSSetting повернув код $($r.Return)."
+                    Emit 'FAIL' ("FAIL - HP WMI код " + $r.Return)
+                }
+                return
+            }
+
+            # ── ІНШІ ВЕНДОРИ ────────────────────────────────────────────────────────
+            Write-Output "[!] Вендор '$vendor' не підтримується для автоматичного BIOS-пароля — поставте вручну."
+            Emit 'WARN' ("вручну - вендор " + $vendor + " не підтримується")
         }
         Main
         """;
