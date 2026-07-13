@@ -1,13 +1,13 @@
 ﻿<#
     Decrypt-BiosPassword.ps1
     Для тих 1-2 людей, у кого є PRIVATE-частина сертифіката "BIOS Password Escrow".
-    Читає зашифрований файл, який Harden-Workstation.ps1 залишив для конкретної машини, і показує пароль.
+    Читає зашифрований файл, який HardenWorkstation.exe залишив для конкретної машини (C:\ProgramData\ITSecurity\bios-<комп'ютер>-<серійник>.txt), і показує пароль.
 
     Приватний сертифікат має бути ІМПОРТОВАНИЙ у Cert:\CurrentUser\My на машині,
     з якої ви це запускаєте (Import-PfxCertificate -FilePath escrow.pfx -CertStoreLocation Cert:\CurrentUser\My).
 
     Приклад:
-        .\Decrypt-BiosPassword.ps1 -EncryptedFilePath "\\server\share\bios-LAPTOP123-PF12AB34.txt"
+        .\Decrypt-BiosPassword.ps1 -EncryptedFilePath "C:\ProgramData\ITSecurity\bios-LAPTOP123-PF12AB34.txt"
 #>
 
 param(

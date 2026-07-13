@@ -17,7 +17,7 @@ $titleLbl.Location = [System.Drawing.Point]::new(20, 15)
 $form.Controls.Add($titleLbl)
 
 $descLbl = New-Object System.Windows.Forms.Label
-$descLbl.Text = "Виконати ОДИН РАЗ. Публічний файл (.cer) підете роздати зі скриптом на всі машини.`r`nПриватний файл (.pfx) лишається тільки у вас - нікуди більше не копіювати."
+$descLbl.Text = "Виконати ОДИН РАЗ. Публічний файл (.cer) кладеться поруч з HardenWorkstation.exe і їде на всі машини.`r`nПриватний файл (.pfx) лишається тільки у вас - нікуди більше не копіювати."
 $descLbl.Location = [System.Drawing.Point]::new(20, 50)
 $descLbl.Size = [System.Drawing.Size]::new(510, 45)
 $descLbl.ForeColor = [System.Drawing.Color]::DimGray
@@ -138,7 +138,7 @@ $genBtn.Add_Click({
         $statusLbl.Text = "Готово! Обидва файли створено в $folder"
 
         [System.Windows.Forms.MessageBox]::Show(
-            "Готово.`r`n`r`nbios-encrypt-public.cer - скопіюйте в папку зі скриптом (Zapustyty.bat), яка піде на всі машини.`r`n`r`nbios-escrow-private.pfx - НІКУДИ не копіюйте. Заберіть у ваш захищений vault, пароль запишіть окремо від файлу.",
+            "Готово.`r`n`r`nbios-encrypt-public.cer - скопіюйте в папку з HardenWorkstation.exe, яка піде на всі машини.`r`n`r`nbios-escrow-private.pfx - НІКУДИ не копіюйте. Заберіть у ваш захищений vault, пароль запишіть окремо від файлу.",
             "Ключі згенеровано", "OK", "Information") | Out-Null
 
         Start-Process explorer.exe -ArgumentList $folder
