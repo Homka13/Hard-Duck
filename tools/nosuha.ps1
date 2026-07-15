@@ -57,10 +57,13 @@ Write-Host "Серійний №    : $SerialNumber"
 
 # ----------------------------------------------------------------
 # 2. Поточний користувач
+#    Спершу — Win32_ComputerSystem (власник інтерактивної сесії).
+#    Якщо не знайдено або це система — quser для консольної сесії.
+#    Якщо консольний користувач — administrator → "LocalAdmin".
 # ----------------------------------------------------------------
 $CurrentUser = 'UNKNOWN'
 
-# Власник інтерактивної сесії
+# Власник інтерактивної сесії через WMI
 $loggedOn = (Get-CimInstance -ClassName Win32_ComputerSystem).UserName
 if ($loggedOn) {
     $CurrentUser = $loggedOn  # DOMAIN\User або COMPUTER\User
@@ -76,6 +79,27 @@ if ($loggedOn -match '^(.+)\\(.+)$') {
             -ErrorAction SilentlyContinue
         if ($userAccount -and $userAccount.FullName) {
             $CurrentUser = "$($userAccount.FullName) ($loggedOn)"
+        }
+    } catch { }
+}
+
+# Резервний шлях: quser — консольна сесія
+if ($CurrentUser -eq 'UNKNOWN' -or $CurrentUser -match '\\SYSTEM$|^NT AUTHORITY\\') {
+    try {
+        $quserOutput = quser 2>$null
+        if ($quserOutput) {
+            # Типовий вивід quser:
+            #  USERNAME              SESSIONNAME        ID  STATE   IDLE TIME  LOGON TIME
+            # >administrator         console             1  Active      .  7/15/2026 9:17 AM
+            $consoleLine = ($quserOutput -split "`n" | Select-String 'console' | Select-Object -First 1).ToString()
+            if ($consoleLine -match '^[>]?\s*(\S+)') {
+                $consoleUser = $Matches[1]
+                if ($consoleUser -eq 'administrator') {
+                    $CurrentUser = 'LocalAdmin'
+                } else {
+                    $CurrentUser = $consoleUser
+                }
+            }
         }
     } catch { }
 }
@@ -135,7 +159,7 @@ try {
 $RecoveryKey = $null
 
 try {
-    Import-Module BitLocker -ErrorAction SilentlyContinue
+    Import-Module BitLocker -ErrorAction SilentlyContinue | Out-Null
     $blVolume = Get-BitLockerVolume -MountPoint 'C:' -ErrorAction Stop
 
     # ── Крок 5a: увімкнути BitLocker, якщо диск розшифровано ──
