@@ -23,10 +23,10 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference    = 'SilentlyContinue'
 
 # ----------------------------------------------------------------
-# Конфігурація — Infisical Cloud
+# Конфігурація — Infisical Cloud (V3 API)
+# Токен читається зі змінної середовища $env:INFISICAL_TOKEN.
 # ----------------------------------------------------------------
-$InfisicalBaseUrl = 'https://api.infisical.com/api/v2/secrets/raw/coati-secret-storage-qu-pc/dev'
-$InfisicalToken   = 'st.b23fd0af-ba6d-4888-8e18-2f31ac73a82e.2d2e6efd178056704215dfb47aaee5d6.5780902e694adb8d37ab433ccfb410b1'
+$InfisicalWorkspaceId = '7f47fee3-7122-4bd5-bbf6-b26c72e1559c'
 
 # ----------------------------------------------------------------
 # Допоміжна функція: генерація криптостійкого пароля
@@ -250,28 +250,39 @@ $deviceData = [PSCustomObject]@{
 } | ConvertTo-Json -Compress -Depth 4
 
 # Пакування у формат Infisical raw-secret: name = DEVICE_<Serial>, value = JSON пристрою
-$secretName = "DEVICE_$SerialNumber"
-$infisicalBody = [PSCustomObject]@{
-    name        = $secretName
-    value       = $deviceData
-    environment = 'dev'
-} | ConvertTo-Json -Compress -Depth 4
-
-Write-Host "Зберігаю секрет '$secretName' у Infisical Cloud..."
+$secretName = "DEVICE_$ComputerName"
 
 # ----------------------------------------------------------------
-# 7. POST до Infisical Cloud API
+# 7. POST до Infisical Cloud API (V3)
 #    Нефатальний: помилка логується, але скрипт продовжує роботу.
 # ----------------------------------------------------------------
 $ReportStatus = 'SUCCESS'
 $ReportError  = ''
 
+# Тіло запиту V3: параметри передаються в JSON-тілі, не в URL
+$v3Payload = @{
+    workspaceId = $InfisicalWorkspaceId
+    environment = 'dev'
+    secretPath  = '/'
+    type        = 'shared'
+    secretName  = $secretName
+    secretValue = $deviceData
+} | ConvertTo-Json
+
+$v3Uri     = "https://app.infisical.com/api/v3/secrets/raw/$secretName"
+$v3Headers = @{
+    'Authorization' = "Bearer $env:INFISICAL_TOKEN"
+    'Content-Type'  = 'application/json'
+}
+
+Write-Host "Зберігаю секрет '$secretName' у Infisical Cloud (V3)..."
+
 try {
-    $response = Invoke-RestMethod -Uri $InfisicalBaseUrl `
+    $response = Invoke-RestMethod -Uri $v3Uri `
         -Method Post `
-        -Body $infisicalBody `
+        -Headers $v3Headers `
+        -Body $v3Payload `
         -ContentType 'application/json; charset=utf-8' `
-        -Headers @{ Authorization = "Bearer $InfisicalToken" } `
         -ErrorAction Stop
     Write-Host "Infisical POST успішно: $($response | ConvertTo-Json -Compress)"
 } catch {
