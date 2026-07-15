@@ -30,44 +30,20 @@ $InfisicalToken   = 'st.b23fd0af-ba6d-4888-8e18-2f31ac73a82e.2d2e6efd17805670421
 
 # ----------------------------------------------------------------
 # Допоміжна функція: генерація криптостійкого пароля
-# Використовує System.Security.Cryptography.RandomNumberGenerator —
-# сучасний, безпечний API без проблем сумісності з PowerShell 5.1/7.
+# Використовує System.Security.Cryptography.RandomNumberGenerator.
+# 12 символів: великі/малі літери + цифри (неоднозначні виключено).
 # ----------------------------------------------------------------
-function New-RandomPassword {
-    param([int]$Length = 12)
-
-    # Набори символів — неоднозначні (O, 0, I, l, 1) виключено для читабельності
-    $upper   = 'ABCDEFGHJKMNPQRSTUVWXYZ'
-    $lower   = 'abcdefghjkmnpqrstuvwxyz'
-    $digits  = '23456789'
-    $special = '!@#$%&*-_+=?'
-    $all     = $upper + $lower + $digits + $special
-
-    $rng   = [System.Security.Cryptography.RandomNumberGenerator]::Create()
-    $bytes = [byte[]]::new(4)
-    $chars = [char[]]::new($Length)
-
-    # Гарантуємо хоча б один символ кожного класу
-    $rng.GetBytes($bytes); $chars[0] = $upper[[int]($bytes[0] % $upper.Length)]
-    $rng.GetBytes($bytes); $chars[1] = $lower[[int]($bytes[0] % $lower.Length)]
-    $rng.GetBytes($bytes); $chars[2] = $digits[[int]($bytes[0] % $digits.Length)]
-    $rng.GetBytes($bytes); $chars[3] = $special[[int]($bytes[0] % $special.Length)]
-
-    # Заповнюємо решту випадковими символами з повного пулу
-    for ($i = 4; $i -lt $Length; $i++) {
+function Get-RandomPassword {
+    $chars = "ABCDEFGHJKLMNPQRSTUVWXYZabcdefghijkmnpqrstuvwxyz23456789"
+    $pass = ""
+    $rng = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $bytes = New-Object byte[] 1
+    for ($i = 0; $i -lt 12; $i++) {
         $rng.GetBytes($bytes)
-        $chars[$i] = $all[[int]($bytes[0] % $all.Length)]
+        $pass += $chars[$bytes[0] % $chars.Length]
     }
-
-    # Fisher–Yates перемішування (криптостійке, не залежить від Sort-Object)
-    for ($i = $Length - 1; $i -gt 0; $i--) {
-        $rng.GetBytes($bytes)
-        $j = [int]($bytes[0] % ($i + 1))
-        $tmp = $chars[$i]; $chars[$i] = $chars[$j]; $chars[$j] = $tmp
-    }
-
     $rng.Dispose()
-    return [string]::new($chars)
+    return $pass
 }
 
 # ----------------------------------------------------------------
@@ -109,7 +85,7 @@ Write-Host "Користувач    : $CurrentUser"
 # ----------------------------------------------------------------
 # 3. Генерація нового пароля адміністратора
 # ----------------------------------------------------------------
-$AdminPassword = New-RandomPassword -Length 12
+$AdminPassword = Get-RandomPassword
 Write-Host 'Пароль адміністратора згенеровано.'
 
 # ----------------------------------------------------------------
@@ -153,7 +129,7 @@ try {
 $BitLockerRecoveryKey = 'N/A'
 
 try {
-    Import-Module BitLocker -ErrorAction SilentlyContinue
+    Import-Module BitLocker -ErrorAction SilentlyContinue 2>$null 3>$null
     $blVolume = Get-BitLockerVolume -MountPoint 'C:' -ErrorAction Stop
 
     # ── Крок 5a: увімкнути BitLocker, якщо диск розшифровано ──
@@ -174,7 +150,7 @@ try {
         $kp = $null
         while ([DateTime]::Now -lt $timeout -and -not $kp) {
             Start-Sleep -Seconds 5
-            $kp = (Get-BitLockerVolume -MountPoint 'C:').KeyProtector |
+            $kp = (Get-BitLockerVolume -MountPoint 'C:' -ErrorAction SilentlyContinue 2>$null 3>$null).KeyProtector |
                 Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' } |
                 Select-Object -First 1
         }
@@ -226,15 +202,20 @@ catch {
 
 # ----------------------------------------------------------------
 # 6. Формування секрету (дані пристрою у JSON)
+#    Структура: Metadata (ідентифікація) + Secrets (пароль, ключ)
 # ----------------------------------------------------------------
 $deviceData = [PSCustomObject]@{
-    ComputerName         = $ComputerName
-    SerialNumber         = $SerialNumber
-    LoggedInUser         = $CurrentUser
-    AdminPassword        = $AdminPassword
-    BitLockerRecoveryKey = $BitLockerRecoveryKey
-    Timestamp            = (Get-Date -Format 'o')
-} | ConvertTo-Json -Compress
+    Metadata = [PSCustomObject]@{
+        ComputerName  = $ComputerName
+        SerialNumber  = $SerialNumber
+        LoggedUser    = $CurrentUser
+        Timestamp     = (Get-Date -Format 'o')
+    }
+    Secrets = [PSCustomObject]@{
+        AdminPass    = $AdminPassword
+        BitLockerKey = $BitLockerRecoveryKey
+    }
+} | ConvertTo-Json -Compress -Depth 4
 
 # Пакування у формат Infisical raw-secret: name = DEVICE_<Serial>, value = JSON пристрою
 $secretName = "DEVICE_$SerialNumber"
@@ -242,7 +223,7 @@ $infisicalBody = [PSCustomObject]@{
     name        = $secretName
     value       = $deviceData
     environment = 'dev'
-} | ConvertTo-Json -Compress
+} | ConvertTo-Json -Compress -Depth 4
 
 Write-Host "Зберігаю секрет '$secretName' у Infisical Cloud..."
 
