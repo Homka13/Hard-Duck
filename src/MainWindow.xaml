@@ -214,28 +214,7 @@
                                             Kind="{Binding StatusIcon}"
                                             Width="18" Height="18"
                                             VerticalAlignment="Center"
-                                            Foreground="{Binding StatusBrush}">
-                                            <materialDesign:PackIcon.RenderTransform>
-                                                <RotateTransform Angle="0"/>
-                                            </materialDesign:PackIcon.RenderTransform>
-                                            <materialDesign:PackIcon.Style>
-                                                <Style TargetType="materialDesign:PackIcon">
-                                                    <Style.Triggers>
-                                                        <DataTrigger Binding="{Binding Status}" Value="Running">
-                                                            <DataTrigger.EnterActions>
-                                                                <BeginStoryboard>
-                                                                    <Storyboard RepeatBehavior="Forever">
-                                                                        <DoubleAnimation
-                                                                            Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
-                                                                            From="0" To="360" Duration="0:0:1"/>
-                                                                    </Storyboard>
-                                                                </BeginStoryboard>
-                                                            </DataTrigger.EnterActions>
-                                                        </DataTrigger>
-                                                    </Style.Triggers>
-                                                </Style>
-                                            </materialDesign:PackIcon.Style>
-                                        </materialDesign:PackIcon>
+                                            Foreground="{Binding StatusBrush}"/>
                                         <StackPanel Grid.Column="1" Margin="8,0,0,0">
                                             <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
                                                        FontSize="13"/>

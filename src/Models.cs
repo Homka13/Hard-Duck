@@ -1,23 +1,22 @@
 using System.ComponentModel;
 using System.Runtime.CompilerServices;
 using System.Windows.Media;
+using MaterialDesignThemes.Wpf;
 
 namespace HardDuck;
 
 public enum StageStatus
 {
-    Pending,   // ще не виконувався
-    Running,   // виконується зараз
+    Pending,
+    Running,
     Ok,
-    Warn,      // виконано, але є що доробити (наприклад, BIOS-пароль вручну)
-    Skip,      // пропущено свідомо (вже налаштовано / вимкнено користувачем)
+    Warn,
+    Skip,
     Fail
 }
 
-/// <summary>Результат одного етапу: статус + короткий підсумок для CSV.</summary>
 public sealed record StageOutcome(StageStatus Status, string Summary);
 
-/// <summary>ViewModel рядка чекліста у вікні.</summary>
 public sealed class StageVm : INotifyPropertyChanged
 {
     public StageVm(string key, string title)
@@ -43,14 +42,14 @@ public sealed class StageVm : INotifyPropertyChanged
         set { _summary = value; Raise(); Raise(nameof(StatusText)); }
     }
 
-    public string StatusIcon => Status switch
+    public PackIconKind StatusIcon => Status switch
     {
-        StageStatus.Ok      => "CheckCircle",
-        StageStatus.Warn    => "Alert",
-        StageStatus.Fail    => "CloseCircle",
-        StageStatus.Running => "Sync",
-        StageStatus.Skip    => "MinusCircle",
-        _                   => "CircleOutline"
+        StageStatus.Ok      => PackIconKind.CheckCircle,
+        StageStatus.Warn    => PackIconKind.Alert,
+        StageStatus.Fail    => PackIconKind.CloseCircle,
+        StageStatus.Running => PackIconKind.Sync,
+        StageStatus.Skip    => PackIconKind.MinusCircle,
+        _                   => PackIconKind.CircleOutline
     };
 
     public string StatusText => Status switch
