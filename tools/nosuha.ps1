@@ -104,6 +104,13 @@ if ($CurrentUser -eq 'UNKNOWN' -or $CurrentUser -match '\\SYSTEM$|^NT AUTHORITY\
     } catch { }
 }
 
+# Якщо після всіх перевірок користувач досі не визначений —
+# використовуємо 'local' як резервне значення за замовчуванням.
+if ([string]::IsNullOrWhiteSpace($CurrentUser) -or $CurrentUser -eq 'UNKNOWN') {
+    Write-Host '[INFO] No standard user detected. Defaulting to local admin context.'
+    $CurrentUser = 'local'
+}
+
 Write-Host "Користувач    : $CurrentUser"
 
 # ----------------------------------------------------------------
@@ -146,23 +153,20 @@ try {
 }
 
 # ----------------------------------------------------------------
-# 5. BitLocker — трифазна обробка:
-#    5a. Увімкнення (якщо розшифровано) або SKIP з повідомленням.
+# 5. BitLocker — три незалежні фази:
+#    5a. Увімкнення (якщо розшифровано) або SKIP.
 #    5b. Забезпечення наявності RecoveryPassword протектора.
-#    5c. Примусове отримання ключа через Get-BitLockerKeyProtector —
-#        виконується ЗАВЖДИ, незалежно від того, чи BitLocker щойно
-#        увімкнено, чи він уже працював.
-#    ВАЖЛИВО: KeyProtector.RecoveryPassword завжди порожнє в об'єктах
-#    Get-BitLockerVolume. Для отримання 48-значного ключа потрібно
-#    пропустити протектор через Get-BitLockerKeyProtector.
+#    5c. ОТРИМАННЯ КЛЮЧА — власний try/catch, виконується ЗАВЖДИ,
+#        навіть якщо 5a або 5b впали з помилкою.
 # ----------------------------------------------------------------
 $RecoveryKey = $null
 
+# ── 5a+5b: увімкнення + протектор (спільний try/catch, нефатальний) ──
 try {
     Import-Module BitLocker -ErrorAction SilentlyContinue | Out-Null
     $blVolume = Get-BitLockerVolume -MountPoint 'C:' -ErrorAction Stop
 
-    # ── Крок 5a: увімкнути BitLocker, якщо диск розшифровано ──
+    # 5a: увімкнути, якщо розшифровано
     if ($blVolume.ProtectionStatus -eq 'Off' -and $blVolume.VolumeStatus -eq 'FullyDecrypted') {
         Write-Host 'C: повністю розшифровано. Увімкнення BitLocker (XtsAes256, TPM-only)...'
 
@@ -173,9 +177,6 @@ try {
             -ErrorAction Stop
 
         Write-Host 'Шифрування BitLocker запущено. Очікування появи RecoveryPassword протектора...'
-
-        # Опитування до 120 секунд — Enable-BitLocker автоматично створює
-        # RecoveryPassword, але йому потрібен час на ініціалізацію TPM
         $timeout = [DateTime]::Now.AddSeconds(120)
         $kp = $null
         while ([DateTime]::Now -lt $timeout -and -not $kp) {
@@ -189,14 +190,13 @@ try {
         Write-Host 'SKIP — BitLocker вже увімкнено на C:.'
     }
 
-    # ── Крок 5b: переконатись, що RecoveryPassword протектор існує ──
+    # 5b: переконатись, що протектор існує
     $blVolume = Get-BitLockerVolume -MountPoint 'C:'
     $existingKp = $blVolume.KeyProtector |
         Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' } |
         Select-Object -First 1
 
     if (-not $existingKp) {
-        # Протектора немає — безпечно додаємо новий
         Write-Host 'Протектор RecoveryPassword відсутній — додаю...'
         try {
             $null = Add-BitLockerKeyProtector -MountPoint 'C:' `
@@ -208,24 +208,30 @@ try {
             Write-Warning "Не вдалося додати протектор RecoveryPassword: $_"
         }
     }
+}
+catch {
+    Write-Warning "Помилка ініціалізації BitLocker: $_"
+}
 
-    # ── Крок 5c: ПРИМУСОВЕ отримання ключа (завжди, незалежно від 5a) ──
-    $blVolume = Get-BitLockerVolume -MountPoint 'C:'
-    $protector = $blVolume.KeyProtector |
-        Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' } |
-        Select-Object -First 1
+# ── 5c: ОТРИМАННЯ КЛЮЧА (власний try/catch, виконується ЗАВЖДИ) ──
+try {
+    $blVolume = Get-BitLockerVolume -MountPoint 'C:' -ErrorAction SilentlyContinue
+    if ($blVolume) {
+        $RecoveryKey = ($blVolume.KeyProtector |
+            Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' } |
+            Select-Object -First 1 |
+            Get-BitLockerKeyProtector -ErrorAction SilentlyContinue).RecoveryPassword
 
-    if ($protector) {
-        $protectorDetails = $protector | Get-BitLockerKeyProtector
-        $RecoveryKey = $protectorDetails.RecoveryPassword
-        Write-Host "Ключ відновлення BitLocker отримано (протектор ID: $($protector.KeyProtectorId))."
+        if ($RecoveryKey) {
+            Write-Host 'Ключ відновлення BitLocker успішно отримано.'
+        }
     }
 }
 catch {
-    Write-Warning "Критична помилка операції BitLocker: $_"
+    Write-Warning "Не вдалося отримати ключ BitLocker: $_"
 }
 
-# ── Крок 5d: валідація (CRITICAL попередження, але скрипт продовжує) ──
+# ── 5d: валідація (CRITICAL попередження, але скрипт продовжує) ──
 if (-not $RecoveryKey) {
     Write-Warning 'CRITICAL: BitLocker recovery key could not be retrieved.'
     Write-Warning 'Секрет буде відправлено в Infisical з BitLockerKey = N/A.'
