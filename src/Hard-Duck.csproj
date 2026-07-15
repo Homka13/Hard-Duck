@@ -10,7 +10,7 @@
     <RootNamespace>HardDuck</RootNamespace>
     <AssemblyName>Hard-Duck</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>1.0.15</Version>
+    <Version>1.0.16</Version>
     <Product>Hard-Duck — Захист робочої станції</Product>
     <Description>BitLocker (TPM+PIN), ескроу ключів в Infisical, гібернація, BIOS-пароль (Lenovo), Windows LAPS, Hard-Duck ZTP</Description>
   </PropertyGroup>
@@ -19,5 +19,22 @@
     <PackageReference Include="MaterialDesignThemes" Version="5.1.0" />
     <PackageReference Include="MaterialDesignColors" Version="3.0.0" />
   </ItemGroup>
+
+  <!-- Після публікації: створити Hard-Duck-v<version>.exe та .sha256 -->
+  <Target Name="VersionedExeCopy" AfterTargets="Publish">
+    <PropertyGroup>
+      <PublishDir>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(PublishDir)'))</PublishDir>
+      <VersionedExe>$(PublishDir)Hard-Duck-v$(Version).exe</VersionedExe>
+    </PropertyGroup>
+    <Copy SourceFiles="$(PublishDir)Hard-Duck.exe"
+          DestinationFiles="$(VersionedExe)" />
+    <Message Text="==> Versioned EXE: $(VersionedExe)" Importance="high" />
+
+    <!-- SHA256 хеш для версійованого EXE -->
+    <Exec Command="powershell -NoProfile -Command &quot;(Get-FileHash '$(VersionedExe)' -Algorithm SHA256).Hash.ToLower() | Set-Content -NoNewline '$(VersionedExe).sha256'&quot;"
+          Condition="'$(OS)' == 'Windows_NT'" />
+    <Exec Command="shasum -a 256 '$(VersionedExe)' | cut -d' ' -f1 | tr -d '\n' > '$(VersionedExe).sha256'"
+          Condition="'$(OS)' != 'Windows_NT'" />
+  </Target>
 
 </Project>
