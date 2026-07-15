@@ -7,6 +7,7 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
+    <EnableWindowsTargeting>true</EnableWindowsTargeting>
     <RootNamespace>HardDuck</RootNamespace>
     <AssemblyName>Hard-Duck</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
@@ -17,7 +18,7 @@
 
   <ItemGroup>
     <PackageReference Include="MaterialDesignThemes" Version="5.1.0" />
-    <PackageReference Include="MaterialDesignColors" Version="3.0.0" />
+    <PackageReference Include="MaterialDesignColors" Version="3.1.0" />
   </ItemGroup>
 
   <!-- Після публікації: створити Hard-Duck-v<version>.exe та .sha256 -->

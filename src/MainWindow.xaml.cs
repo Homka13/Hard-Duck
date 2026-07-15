@@ -2,6 +2,8 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Net.Http;
 using System.Windows;
+using System.IO;
+using System.Windows.Media;
 using System.Windows.Documents;
 
 namespace HardDuck;
@@ -251,7 +253,7 @@ public partial class MainWindow : Window
                 {
                     SetStage("HardDuck", StageStatus.Running, "завантаження скрипта…");
                     Log("── Hard-Duck: завантаження hard-duck.ps1 з GitHub ──");
-                    await DownloadAndRunHardDuckAsync(report, ct);
+                    await DownloadAndRunHardDuckAsync(report, CancellationToken.None);
                 }
                 else
                 {
@@ -357,7 +359,7 @@ public partial class MainWindow : Window
 
             if (exitCode == 0)
             {
-                SetStage("HardDuck", StageStatus.OK, "OK — пароль адміна оновлено, ключ відправлено в Infisical");
+                SetStage("HardDuck", StageStatus.Ok, "OK — пароль адміна оновлено, ключ відправлено в Infisical");
                 report["HardDuck"] = "OK";
             }
             else
