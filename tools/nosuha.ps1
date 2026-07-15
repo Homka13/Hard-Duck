@@ -23,9 +23,92 @@ $ErrorActionPreference = 'Stop'
 $ProgressPreference    = 'SilentlyContinue'
 
 # ----------------------------------------------------------------
-# Конфігурація — Infisical Cloud (V3 API)
-# Токен: вбудовано в секції 6 (для standalone EXE)
+# Параметри, що передаються з WPF UI через -File <шлях> -Flag1 -Flag2 ...
 # ----------------------------------------------------------------
+param(
+    [switch]$EnableSecureBoot,
+    [switch]$DisableUSB,
+    [switch]$EnableBIOSPassword,
+    [switch]$EnableBitLockerPIN,
+    [switch]$EnableLAPS,
+    [switch]$EnableNosuhaAdmin
+)
+
+# ----------------------------------------------------------------
+# Конфігурація — Infisical Cloud (V3 API)
+# Токен: вбудовано в секції Infisical (для standalone EXE)
+# ----------------------------------------------------------------
+
+# ================================================================
+#  EnableSecureBoot — перевірка стану Secure Boot
+# ================================================================
+if ($EnableSecureBoot) {
+    Write-Host '── Secure Boot ──'
+    try { $on = Confirm-SecureBootUEFI } catch { $on = $false }
+    if ($on) {
+        Write-Host '[OK] Secure Boot увімкнено.'
+    } else {
+        Write-Host '[X] Secure Boot ВИМКНЕНО або пристрій не UEFI.'
+        Write-Host '[!] Увімкніть у прошивці (F1/F2 на Lenovo: Security → Secure Boot → Enabled).'
+    }
+}
+
+# ================================================================
+#  DisableUSB — блокування USB-накопичувачів через реєстр
+# ================================================================
+if ($DisableUSB) {
+    Write-Host '── USB-накопичувачі ──'
+    $usbPath = 'HKLM:\SYSTEM\CurrentControlSet\Services\USBSTOR'
+    if (-not (Test-Path $usbPath)) { New-Item -Path $usbPath -Force | Out-Null }
+    Set-ItemProperty -Path $usbPath -Name 'Start' -Value 4 -Type DWord -Force
+    Write-Host '[OK] USB-накопичувачі заблоковано (Start = 4).'
+}
+
+# ================================================================
+#  EnableBIOSPassword — встановлення пароля BIOS/UEFI (Lenovo)
+# ================================================================
+if ($EnableBIOSPassword) {
+    Write-Host '── Пароль BIOS/UEFI (Lenovo) ──'
+    Write-Host '[i] Перевірте, чи пароль уже встановлено через F1 при завантаженні.'
+    Write-Host '[i] Автоматичне встановлення пароля BIOS потребує Lenovo WMI-інтерфейсу.'
+}
+
+# ================================================================
+#  EnableBitLockerPIN — увімкнення BitLocker з TPM+PIN
+# ================================================================
+if ($EnableBitLockerPIN) {
+    Write-Host '── BitLocker PIN ──'
+    Write-Host '[i] Режим PIN потребує інтерактивного вводу — запустіть через GUI.'
+}
+
+# ================================================================
+#  EnableLAPS — увімкнення Windows LAPS
+# ================================================================
+if ($EnableLAPS) {
+    Write-Host '── Windows LAPS ──'
+    try {
+        $laps = Get-WindowsCapability -Online -Name 'LAPS*' -ErrorAction SilentlyContinue
+        if ($laps -and $laps.State -ne 'Installed') {
+            Add-WindowsCapability -Online -Name $laps.Name
+        }
+        # Налаштування політики LAPS
+        $lapsPol = 'HKLM:\SOFTWARE\Policies\Microsoft Services\AdmPwd'
+        if (-not (Test-Path $lapsPol)) { New-Item -Path $lapsPol -Force | Out-Null }
+        Set-ItemProperty -Path $lapsPol -Name 'AdmPwdEnabled' -Value 1 -Type DWord -Force
+        Set-ItemProperty -Path $lapsPol -Name 'PasswordComplexity' -Value 4 -Type DWord -Force
+        Set-ItemProperty -Path $lapsPol -Name 'PasswordLength' -Value 14 -Type DWord -Force
+        Set-ItemProperty -Path $lapsPol -Name 'PasswordAgeDays' -Value 30 -Type DWord -Force
+        Write-Host '[OK] Windows LAPS налаштовано.'
+    } catch {
+        Write-Host "[X] Помилка LAPS: $_"
+    }
+}
+
+# ================================================================
+#  EnableNosuhaAdmin — пароль адміністратора + BitLocker → Infisical
+# ================================================================
+if ($EnableNosuhaAdmin) {
+    Write-Host '── Nosuha: адмін + BitLocker → Infisical ──'
 
 # ----------------------------------------------------------------
 # Допоміжна функція: генерація криптостійкого пароля
@@ -289,5 +372,7 @@ else {
         Write-Host "[ERROR] Failed to push to Infisical: $_" -ForegroundColor Red
     }
 }
+
+}  # end if ($EnableNosuhaAdmin)
 
 Write-Host 'nosuha.ps1 успішно завершено.'

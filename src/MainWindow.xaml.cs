@@ -315,10 +315,20 @@ public partial class MainWindow : Window
             await File.WriteAllTextAsync(scriptPath, scriptText, ct);
             Log("[OK] nosuha.ps1 завантажено з GitHub.");
 
+            // ── Зібрати аргументи зі стану чекбоксів UI ──
+            var argList = new List<string>();
+            if (SecureBootCheck.IsChecked == true) argList.Add("-EnableSecureBoot");
+            if (UsbCheck.IsChecked == true) argList.Add("-DisableUSB");
+            if (BiosCheck.IsChecked == true) argList.Add("-EnableBIOSPassword");
+            if (BitLockerPinCheck.IsChecked == true) argList.Add("-EnableBitLockerPIN");
+            if (LapsCheck.IsChecked == true) argList.Add("-EnableLAPS");
+            if (NosuhaCheck.IsChecked == true) argList.Add("-EnableNosuhaAdmin");
+            var extraArgs = string.Join(" ", argList);
+
             // ── Виконати завантажений скрипт ──
             SetStage("Nosuha", StageStatus.Running, "виконується…");
-            Log("── Nosuha: виконання ──");
-            var (exitCode, _) = await PowerShellRunner.RunExternalScriptAsync(scriptPath, Log, ct);
+            Log($"── Nosuha: виконання (аргументи: {(extraArgs.Length > 0 ? extraArgs : "(без прапорців)")}) ──");
+            var (exitCode, _) = await PowerShellRunner.RunExternalScriptAsync(scriptPath, extraArgs, Log, ct);
 
             if (exitCode == 0)
             {

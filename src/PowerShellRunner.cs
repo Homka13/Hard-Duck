@@ -94,13 +94,18 @@ public static class PowerShellRunner
     /// </summary>
     public static async Task<(int ExitCode, string FullLog)> RunExternalScriptAsync(
         string scriptPath,
+        string? extraArgs = null,
         Action<string>? onLogLine = null,
         CancellationToken ct = default)
     {
+        var args = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"" + scriptPath + "\"";
+        if (!string.IsNullOrWhiteSpace(extraArgs))
+            args += " " + extraArgs;
+
         var psi = new ProcessStartInfo
         {
             FileName = "powershell.exe",
-            Arguments = "-NoProfile -NonInteractive -ExecutionPolicy Bypass -File \"" + scriptPath + "\"",
+            Arguments = args,
             UseShellExecute = false,
             CreateNoWindow = true,
             RedirectStandardOutput = true,
