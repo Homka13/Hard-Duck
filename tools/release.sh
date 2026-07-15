@@ -1,60 +1,60 @@
 #!/usr/bin/env bash
-# release.sh — Cut a new release of HardenWorkstation
+# release.sh — Випуск нового релізу HardenWorkstation
 #
-# Usage:
-#   ./tools/release.sh 1.0.7          # tag & push v1.0.7
-#   ./tools/release.sh 1.0.7 dry-run  # preview without pushing
+# Використання:
+#   ./tools/release.sh 1.0.7          # створити тег і запушити v1.0.7
+#   ./tools/release.sh 1.0.7 dry-run  # перегляд без пушу
 #
-# What it does:
-#   1. Updates <Version> in src/HardenWorkstation.csproj
-#   2. Commits the version bump
-#   3. Creates an annotated git tag v<version>
-#   4. Pushes the commit and tag to origin
+# Що робить:
+#   1. Оновлює <Version> у src/HardenWorkstation.csproj
+#   2. Комітить зміну версії
+#   3. Створює анотований git-тег v<version>
+#   4. Пушить коміт і тег до origin
 #
-# The GitHub Actions workflow (.github/workflows/release.yml) triggers on
-# the tag push and handles the rest: build, SHA256, and GitHub Release.
+# GitHub Actions workflow (.github/workflows/release.yml) запускається
+# на пуш тегу й виконує решту: збірка, SHA256 і GitHub Release.
 
 set -euo pipefail
 
-VERSION="${1:?Usage: $0 <version> [dry-run]}"
+VERSION="${1:?Використання: $0 <version> [dry-run]}"
 DRY_RUN="${2:-}"
 
 CSPROJ="src/HardenWorkstation.csproj"
 TAG="v${VERSION}"
 
 if [ ! -f "$CSPROJ" ]; then
-    echo "ERROR: $CSPROJ not found — run from repo root." >&2
+    echo "ПОМИЛКА: $CSPROJ не знайдено — запускайте з кореня репозиторію." >&2
     exit 1
 fi
 
-# ── 1. Update version in .csproj ──────────────────────────────────
-echo "==> Setting version to ${VERSION} in ${CSPROJ} ..."
+# ── 1. Оновлення версії у .csproj ─────────────────────────────────
+echo "==> Встановлення версії ${VERSION} у ${CSPROJ} ..."
 if [[ "$OSTYPE" == "darwin"* ]]; then
     sed -i '' "s|<Version>[0-9]\+\.[0-9]\+\.[0-9]\+</Version>|<Version>${VERSION}</Version>|" "$CSPROJ"
 else
     sed -i "s|<Version>[0-9]\+\.[0-9]\+\.[0-9]\+</Version>|<Version>${VERSION}</Version>|" "$CSPROJ"
 fi
 
-git diff --quiet "$CSPROJ" && echo "WARNING: Version in csproj was already ${VERSION}." || true
+git diff --quiet "$CSPROJ" && echo "УВАГА: Версія у csproj вже була ${VERSION}." || true
 
-# ── 2. Commit version bump ────────────────────────────────────────
-echo "==> Committing version bump ..."
+# ── 2. Коміт зміни версії ─────────────────────────────────────────
+echo "==> Коміт зміни версії ..."
 git add "$CSPROJ"
 git commit -m "chore: bump version to ${VERSION}"
 
-# ── 3. Create annotated tag ───────────────────────────────────────
-echo "==> Creating tag ${TAG} ..."
+# ── 3. Створення анотованого тега ──────────────────────────────────
+echo "==> Створення тега ${TAG} ..."
 git tag -a "${TAG}" -m "Release ${TAG}"
 
-# ── 4. Push (unless dry-run) ──────────────────────────────────────
+# ── 4. Пуш (крім dry-run) ─────────────────────────────────────────
 if [ "$DRY_RUN" = "dry-run" ]; then
-    echo "==> DRY-RUN: would push commit + tag ${TAG} to origin"
-    echo "    Run without 'dry-run' to push."
+    echo "==> DRY-RUN: було б запушено коміт + тег ${TAG} до origin"
+    echo "    Запустіть без 'dry-run' для справжнього пушу."
 else
-    echo "==> Pushing commit and tag ${TAG} to origin ..."
+    echo "==> Пуш коміту й тега ${TAG} до origin ..."
     git push origin HEAD:main
     git push origin "${TAG}"
     echo ""
-    echo "DONE. GitHub Actions will now build and publish the release:"
+    echo "ГОТОВО. GitHub Actions тепер збере й опублікує реліз:"
     echo "  https://github.com/Homka13/Hard-Duck/actions"
 fi

@@ -1,25 +1,26 @@
-# Nosuha — Zero-Touch Provisioning Agent
+# Nosuha — агент Zero-Touch Provisioning
 
-**Version 1.0.7** | Internal tool for Windows endpoint management
+**Версія 1.0.7** | Внутрішній інструмент керування кінцевими точками Windows
 
-Nosuha is a lightweight, standalone Zero-Touch Provisioning (ZTP) agent for Windows 10/11
-workstations. It automates local administrator credential rotation (serving as a Microsoft
-LAPS alternative for environments without Entra ID) and securely escrows BitLocker recovery
-keys to Infisical Cloud — with a single, silent double-click.
+Nosuha — легкий автономний агент Zero-Touch Provisioning (ZTP) для робочих станцій
+Windows 10/11. Автоматизує ротацію облікових даних локального адміністратора (як
+полегшена альтернатива Microsoft LAPS для середовищ без Entra ID) і безпечно передає
+ключі відновлення BitLocker до Infisical Cloud — усе це одним непомітним подвійним
+кліком.
 
 ---
 
-## Architecture Overview
+## Архітектура
 
 ```
-┌──────────────┐     launches      ┌──────────────────────────────┐
+┌──────────────┐      запускає      ┌──────────────────────────────┐
 │   run.bat    │ ─────────────────> │         nosuha.ps1           │
-│  (silent)    │   -NoProfile      │                              │
-│              │   -Window Hidden   │  1. Collect system identity  │
-└──────────────┘                   │  2. Rotate admin password    │
-                                   │  3. Enable BitLocker (TPM)   │
-                                   │  4. Retrieve recovery key     │
-                                   │  5. Build secret payload      │
+│  (без вікна) │   -NoProfile      │                              │
+│              │   -Window Hidden   │  1. Збір системної інформації│
+└──────────────┘                   │  2. Ротація пароля адміна    │
+                                   │  3. Увімкнення BitLocker      │
+                                   │  4. Отримання recovery-ключа  │
+                                   │  5. Формування секрету        │
                                    └───────────┬──────────────────┘
                                                │  HTTPS + Bearer token
                                                ▼
@@ -30,90 +31,93 @@ keys to Infisical Cloud — with a single, silent double-click.
                                    │       qu-pc/dev               │
                                    │                              │
                                    │  Secret: DEVICE_<Serial>      │
-                                   │  Value:  { JSON payload }     │
+                                   │  Value:  { JSON-дані }        │
                                    └──────────────────────────────┘
 ```
 
-The agent is a self-contained PowerShell script (`nosuha.ps1`) invoked by a silent Batch
-launcher (`run.bat`). All collected secrets are transmitted over HTTPS to Infisical Cloud
-using a Service Token for authentication. No local secrets are persisted on disk.
+Агент — це самодостатній PowerShell-скрипт (`nosuha.ps1`), який викликається
+непомітним Batch-ланчером (`run.bat`). Усі зібрані секрети передаються через HTTPS
+до Infisical Cloud з автентифікацією через Service Token. Жодних локальних секретів
+на диску не залишається.
 
 ---
 
-## Features
+## Можливості
 
-| Feature | Description |
+| Можливість | Опис |
 |---|---|
-| **Admin password rotation** | Generates a cryptographically random 12-character password and sets it on the built-in Administrator account (located by SID `*-500` for cross-language compatibility). The account is enabled if disabled. |
-| **BitLocker enablement** | Checks C: drive status. If `FullyDecrypted`, enables BitLocker with TPM-only protector (`XtsAes256`) and `-SkipHardwareTest`. Polls for up to 120 seconds for the `RecoveryPassword` key protector to be provisioned. |
-| **Recovery key escrow** | Retrieves the 48-digit BitLocker recovery password and bundles it with machine identity data into a JSON payload. |
-| **Secure cloud storage** | POSTs the payload to Infisical Cloud as a raw secret named `DEVICE_<BIOS_SerialNumber>` in the `dev` environment. All communication uses HTTPS with Bearer token authentication. |
-| **Silent execution** | `run.bat` invokes PowerShell with `-WindowStyle Hidden` and `-NoProfile` — no console flash, no user interaction required. |
-| **Language-agnostic** | Administrator account located by SID (`*-500`), not by name. Works on any Windows locale. |
+| **Ротація пароля адміністратора** | Генерує криптостійкий 12-значний пароль і встановлює його на вбудований обліковий запис Administrator (знаходиться за SID `*-500` для кросс-мовної сумісності). Якщо обліковий запис вимкнено — вмикає його. |
+| **Увімкнення BitLocker** | Перевіряє статус диска C:. Якщо `FullyDecrypted`, вмикає BitLocker із протектором TPM-only (`XtsAes256`) і ключем `-SkipHardwareTest`. Чекає до 120 секунд на появу протектора `RecoveryPassword`. |
+| **Ескроу recovery-ключа** | Отримує 48-значний пароль відновлення BitLocker і пакує його разом з ідентифікаційними даними машини в JSON. |
+| **Захищене хмарне сховище** | Відправляє дані до Infisical Cloud як сирий секрет із назвою `DEVICE_<СерійнийНомер>` у середовищі `dev`. Уся комунікація — через HTTPS з Bearer-токеном. |
+| **Непомітне виконання** | `run.bat` викликає PowerShell із `-WindowStyle Hidden` і `-NoProfile` — без миготіння консолі, без взаємодії з користувачем. |
+| **Мовна незалежність** | Обліковий запис адміністратора шукається за SID (`*-500`), а не за назвою. Працює на будь-якій локалізації Windows. |
 
 ---
 
-## Setup Guide
+## Інструкція з розгортання
 
-### Prerequisites
+### Передумови
 
-- **Windows 10/11** Pro, Enterprise, or Education (BitLocker requires a non-Home edition).
-- **TPM 2.0** present and ready.
-- **Infisical Cloud** account with access to the `coati-secret-storage-qu-pc` project.
-- **Service Token** with write permission on the target environment (`dev`).
-- **Local Administrator** privileges (the script enforces `#Requires -RunAsAdministrator`).
+- **Windows 10/11** Pro, Enterprise або Education (BitLocker недоступний у Home).
+- **TPM 2.0** присутній і готовий.
+- **Обліковий запис Infisical Cloud** із доступом до проєкту `coati-secret-storage-qu-pc`.
+- **Service Token** із правом запису в цільове середовище (`dev`).
+- **Права локального адміністратора** (скрипт вимагає `#Requires -RunAsAdministrator`).
 
-### Deployment
+### Розгортання
 
-1. Place `nosuha.ps1` and `run.bat` in the same directory on the target machine
-   (e.g., `C:\ProgramData\ITSecurity\`).
+1. Розмістіть `nosuha.ps1` та `run.bat` в одній теці на цільовій машині
+   (наприклад, `C:\ProgramData\ITSecurity\`).
 
-2. Verify the Infisical Service Token is correctly set in `nosuha.ps1`, lines 25–26:
+2. Переконайтеся, що Infisical Service Token правильно вказано у `nosuha.ps1`,
+   рядки 25–26:
 
    ```powershell
    $InfisicalBaseUrl = 'https://api.infisical.com/api/v2/secrets/raw/coati-secret-storage-qu-pc/dev'
-   $InfisicalToken   = 'st.xxx.yyy.zzz'   # <-- replace with your token
+   $InfisicalToken   = 'st.xxx.yyy.zzz'   # <-- замініть на ваш токен
    ```
 
-3. No other configuration is required. The script auto-discovers the computer name,
-   serial number, and logged-in user at runtime.
+3. Жодної додаткової конфігурації не потрібно. Скрипт автоматично визначає ім'я
+   комп'ютера, серійний номер та поточного користувача під час виконання.
 
-### Execution
+### Запуск
 
-**Option A — Double-click (recommended for deployment):**
+**Варіант A — Подвійний клік (рекомендовано для розгортання):**
 ```
-Right-click run.bat → Run as administrator
+Правий клік на run.bat → Запуск від імені адміністратора
 ```
 
-**Option B — Command line:**
+**Варіант B — Командний рядок:**
 ```cmd
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\ITSecurity\nosuha.ps1"
 ```
 
-**Option C — via the HardenWorkstation WPF app:**
-Check the **"Nosuha: пароль адміна + recovery-ключ на webhook"** checkbox before
-running the hardening workflow. The app will execute the Nosuha stages as part of
-the full workstation protection pipeline.
+**Варіант C — через WPF-застосунок HardenWorkstation:**
+Поставте позначку **«Nosuha: пароль адміна + recovery-ключ на webhook»** перед
+запуском процесу захисту. Застосунок виконає етапи Nosuha як частину повного
+конвеєра захисту робочої станції.
 
-### What the script outputs
+### Приклад виводу скрипта
 
 ```
-Computer    : WS-LAB-001
-Serial      : PF4XYZ789
-Logged User : Ivan Petrenko (AZUREAD\ivan.petrenko)
-Administrator password generated.
-Administrator account 'Administrator' password reset and enabled.
-[BitLocker already encrypted] → BitLocker recovery key retrieved.
-Storing secret 'DEVICE_PF4XYZ789' in Infisical Cloud...
-Infisical POST succeeded: {"secret":{"id":"...","name":"DEVICE_PF4XYZ789",...}}
-nosuha.ps1 completed successfully.
+Комп'ютер     : WS-LAB-001
+Серійний №    : PF4XYZ789
+Користувач    : Ivan Petrenko (AZUREAD\ivan.petrenko)
+Пароль адміністратора згенеровано.
+Обліковий запис 'Administrator' — пароль оновлено, обліковий запис увімкнено.
+[BitLocker вже зашифровано] → ключ відновлення BitLocker отримано.
+Зберігаю секрет 'DEVICE_PF4XYZ789' у Infisical Cloud...
+Infisical POST успішно: {"secret":{"id":"...","name":"DEVICE_PF4XYZ789",...}}
+nosuha.ps1 успішно завершено.
 ```
 
 ---
 
-## Secret Payload Format
+## Формат секрету
 
-The following JSON is stored as the `value` of the Infisical secret `DEVICE_<SerialNumber>`:
+Наведений нижче JSON зберігається як значення (`value`) секрету Infisical із ключем
+`DEVICE_<СерійнийНомер>`:
 
 ```json
 {
@@ -128,77 +132,96 @@ The following JSON is stored as the `value` of the Infisical secret `DEVICE_<Ser
 
 ---
 
-## Security Considerations
+## Локалізація
 
-- **Service Token protection:** The Infisical Service Token embedded in `nosuha.ps1` has
-  write access to the `coati-secret-storage-qu-pc` project. Treat the script file with
-  the same care as any credential-bearing artifact. In a production pipeline, consider
-  retrieving the token at runtime from a secrets manager or environment variable rather
-  than hard-coding it.
-- **Transmission security:** All API calls use HTTPS with TLS 1.2+. The token is sent in
-  the `Authorization: Bearer` header — never in the URL or query string.
-- **No local storage:** The generated admin password and recovery key exist only in
-  memory and in the Infisical response. They are never written to disk, event logs, or
-  the registry by this script.
-- **Execution context:** The script requires Administrator privileges. Run it only on
-  trusted, managed machines.
-- **Account enablement:** If the built-in Administrator account was previously disabled,
-  this script will enable it. Review this behavior against your organization's security
-  policy.
+Інструмент повністю підтримує українську мову для локальних лабораторних операцій.
+Увесь інтерфейс командного рядка, логи, статусні повідомлення та документація
+перекладені українською. Технічні терміни (ZTP, BitLocker, TPM, Infisical, API,
+JSON) залишено англійською або в стандартній технічній транслітерації.
+
+Підтримувані мови:
+
+| Мова | Статус |
+|---|---|
+| Українська | ✅ Повна підтримка (основна) |
+| Англійська | ✅ Вихідний код (C#) та технічні коментарі |
 
 ---
 
-## Versioning
+## Зауваги щодо безпеки
 
-| Component | Version |
+- **Захист Service Token:** Infisical Service Token, вбудований у `nosuha.ps1`, має
+  право запису в проєкт `coati-secret-storage-qu-pc`. Поводьтеся з файлом скрипта
+  так само обережно, як із будь-яким артефактом, що містить облікові дані. У
+  промисловому конвеєрі рекомендується отримувати токен під час виконання з
+  менеджера секретів або змінної середовища, а не жорстко прописувати його в коді.
+- **Безпека передавання:** Усі виклики API використовують HTTPS із TLS 1.2+. Токен
+  передається в заголовку `Authorization: Bearer` — ніколи в URL чи рядку запиту.
+- **Відсутність локального збереження:** Згенерований пароль адміністратора та ключ
+  відновлення існують лише в пам'яті та у відповіді Infisical. Вони ніколи не
+  записуються на диск, у журнали подій чи реєстр цим скриптом.
+- **Контекст виконання:** Скрипт потребує прав адміністратора. Запускайте його лише
+  на довірених, керованих машинах.
+- **Увімкнення облікового запису:** Якщо вбудований обліковий запис Administrator
+  було раніше вимкнено, цей скрипт увімкне його. Перевірте цю поведінку на
+  відповідність політиці безпеки вашої організації.
+
+---
+
+## Версіонування
+
+| Компонент | Версія |
 |---|---|
 | nosuha.ps1 | 1.0.7 |
 | run.bat | 1.0.7 |
-| Infisical project | `coati-secret-storage-qu-pc` / `dev` |
+| Проєкт Infisical | `coati-secret-storage-qu-pc` / `dev` |
 
-Release tagging follows [Semantic Versioning](https://semver.org/). To cut a new release:
+Релізне тегування — за [Semantic Versioning](https://semver.org/). Щоб випустити
+новий реліз:
 
 ```bash
-./tools/release.sh 1.0.8          # bump version, tag, and push
-./tools/release.sh 1.0.8 dry-run  # preview without pushing
+./tools/release.sh 1.0.8          # оновити версію, створити тег і запушити
+./tools/release.sh 1.0.8 dry-run  # перегляд без пушу
 ```
 
-The GitHub Actions workflow (`.github/workflows/release.yml`) triggers on every `v*` tag
-push and automatically publishes a GitHub Release with the built artifact and SHA256
-checksum.
+GitHub Actions workflow (`.github/workflows/release.yml`) запускається на кожен пуш
+тегу `v*` і автоматично публікує GitHub Release зі зібраним артефактом і
+контрольною сумою SHA256.
 
 ---
 
-## Related Tools
+## Пов'язані інструменти
 
-This repository also contains **HardenWorkstation** — a .NET 8 WPF desktop application
-that performs a full workstation hardening workflow with a graphical checklist UI:
+Цей репозиторій також містить **HardenWorkstation** — десктопний WPF-застосунок
+на .NET 8, який виконує повний цикл захисту робочої станції з графічним
+інтерфейсом у вигляді чекліста:
 
-| Stage | Description |
+| Етап | Опис |
 |---|---|
-| Secure Boot | Verification; aborts if disabled |
-| TPM 2.0 | Readiness check |
-| Entra ID join | Full join verification |
-| BitLocker | TPM-only or TPM+PIN with PIN dialog |
-| Recovery key | Backup to Entra ID |
-| Hibernation | Enforced after 10 min idle |
-| USB storage | Optional block via driver disable |
-| BIOS password | Lenovo WMI status check |
-| Windows LAPS | Optional Entra ID-based LAPS |
-| **Nosuha** | Admin password rotation + webhook key escrow |
-| Admin rights | Interactive daily-user de-elevation |
+| Secure Boot | Перевірка; зупинка, якщо вимкнено |
+| TPM 2.0 | Перевірка готовності |
+| Entra ID join | Перевірка повного приєднання |
+| BitLocker | TPM-only або TPM+PIN із діалогом PIN |
+| Recovery-ключ | Бекап до Entra ID |
+| Гібернація | Примусово після 10 хв бездіяльності |
+| USB-накопичувачі | Опційне блокування через вимкнення драйверів |
+| BIOS-пароль | Перевірка стану через Lenovo WMI |
+| Windows LAPS | Опційний LAPS на базі Entra ID |
+| **Nosuha** | Ротація пароля адміністратора + ескроу ключа |
+| Права адміністратора | Інтерактивне зняття прав у щоденного користувача |
 
-### Building HardenWorkstation
+### Збірка HardenWorkstation
 
-Requires [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0):
+Потрібен [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0):
 
 ```powershell
 cd src
 dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 ```
 
-Output: `src\bin\Release\net8.0-windows\win-x64\publish\HardenWorkstation.exe`
+Результат: `src\bin\Release\net8.0-windows\win-x64\publish\HardenWorkstation.exe`
 
-The application uses embedded PowerShell scripts (`Scripts.cs`) executed via
-`powershell.exe -EncodedCommand`. Secrets (PINs) are passed through stdin only —
-never via command-line arguments — to avoid exposure in process audit logs.
+Застосунок використовує вбудовані PowerShell-скрипти (`Scripts.cs`), які
+виконуються через `powershell.exe -EncodedCommand`. Секрети (PIN) передаються
+лише через stdin — ніколи через аргументи командного рядка — щоб уникнути
+витоку в журналах аудиту процесів.
