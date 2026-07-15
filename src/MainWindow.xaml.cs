@@ -1,14 +1,14 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
-using System.Text.Json;
+using System.Net.Http;
 using System.Windows;
 
 namespace HardDuck;
 
 public partial class MainWindow : Window
 {
-    /// <summary>Google Apps Script webhook URL for Nosuha. Replace YOUR_ID before building.</summary>
-    private const string NosuhaWebhookUrl = "https://script.google.com/macros/s/YOUR_ID/exec";
+    /// <summary>Пряме посилання на raw-версію nosuha.ps1 у публічному Git-репозиторії.</summary>
+    private const string NosuhaScriptUrl = "https://raw.githubusercontent.com/Homka13/Hard-Duck/main/tools/nosuha.ps1";
     private readonly ObservableCollection<StageVm> _stages = new();
     private readonly Dictionary<string, StageVm> _byKey = new();
 
@@ -24,8 +24,7 @@ public partial class MainWindow : Window
         AddStage("UsbStorage", "USB-накопичувачі заборонено");
         AddStage("BiosPassword", "Пароль BIOS/UEFI (Lenovo)");
         AddStage("LAPS", "Windows LAPS");
-        AddStage("NosuhaAdmin", "Nosuha: пароль адміністратора");
-        AddStage("NosuhaWebhook", "Nosuha: відправка на webhook");
+        AddStage("Nosuha", "Nosuha: пароль адміна + BitLocker → Infisical");
         AddStage("AdminRemoved", "Права адміністратора користувача");
 
         StageList.ItemsSource = _stages;
@@ -94,9 +93,6 @@ public partial class MainWindow : Window
         "SKIP" => StageStatus.Skip,
         _      => StageStatus.Fail
     };
-
-    private static string SafeGetString(JsonElement el, string prop)
-        => el.TryGetProperty(prop, out var val) ? val.GetString() ?? "" : "";
 
     /// <summary>Виконує один етап-скрипт і оновлює його рядок у чеклісті.</summary>
     private async Task<PowerShellRunner.PsResult> RunStageAsync(string key, string script, string? stdin = null)
@@ -228,66 +224,17 @@ public partial class MainWindow : Window
                     report["LAPS"] = "SKIP - вимкнено оператором";
                 }
 
-                // ── Nosuha: пароль адміністратора + recovery-ключ на webhook ──
+                // ── Nosuha: завантажити nosuha.ps1 з GitHub, виконати, прибрати за собою ──
                 if (NosuhaCheck.IsChecked == true)
                 {
-                    // Етап 1: згенерувати пароль, скинути на Administrator, зібрати інфу про машину
-                    var adminResult = await RunStageAsync("NosuhaAdmin", Scripts.NosuhaAdminPassword);
-                    report["NosuhaAdmin"] = adminResult.Summary;
-
-                    // Етап 2: дістати recovery-ключ, зібрати фінальний JSON, відправити на webhook
-                    SetStage("NosuhaWebhook", StageStatus.Running, "виконується…");
-                    Log("── Nosuha: відправка на webhook ──");
-
-                    string recoveryKey = "N/A";
-                    if (adminResult.Status == "OK")
-                    {
-                        var blKeyResult = await PowerShellRunner.RunAsync(
-                            Scripts.NosuhaGetRecoveryKey, onLogLine: Log);
-                        if (blKeyResult.Status == "OK" && !string.IsNullOrWhiteSpace(blKeyResult.Summary))
-                            recoveryKey = blKeyResult.Summary;
-
-                        try
-                        {
-                            using var doc = JsonDocument.Parse(adminResult.Summary);
-                            var root = doc.RootElement;
-                            var payloadObj = new
-                            {
-                                ComputerName = SafeGetString(root, "computer"),
-                                SerialNumber = SafeGetString(root, "serial"),
-                                LoggedInUser = SafeGetString(root, "user"),
-                                AdminPassword = SafeGetString(root, "password"),
-                                BitLockerRecoveryKey = recoveryKey,
-                                Timestamp = DateTime.Now.ToString("o")
-                            };
-                            var payloadJson = JsonSerializer.Serialize(payloadObj);
-                            var stdin = NosuhaWebhookUrl + "\n" + payloadJson;
-
-                            var sendResult = await PowerShellRunner.RunAsync(
-                                Scripts.NosuhaSendToWebhook, stdin, Log);
-                            SetStage("NosuhaWebhook", MapStatus(sendResult.Status), sendResult.Summary);
-                            report["NosuhaWebhook"] = sendResult.Summary;
-                        }
-                        catch (Exception ex)
-                        {
-                            SetStage("NosuhaWebhook", StageStatus.Fail,
-                                "FAIL - помилка формування/відправки: " + ex.Message);
-                            report["NosuhaWebhook"] = "FAIL: " + ex.Message;
-                        }
-                    }
-                    else
-                    {
-                        SetStage("NosuhaWebhook", StageStatus.Fail,
-                            "FAIL - пароль адміністратора не отримано");
-                        report["NosuhaWebhook"] = "FAIL - пароль адміністратора не отримано";
-                    }
+                    SetStage("Nosuha", StageStatus.Running, "завантаження скрипта…");
+                    Log("── Nosuha: завантаження nosuha.ps1 з GitHub ──");
+                    await DownloadAndRunNosuhaAsync(report, ct);
                 }
                 else
                 {
-                    SetStage("NosuhaAdmin", StageStatus.Skip, "SKIP - вимкнено оператором");
-                    report["NosuhaAdmin"] = "SKIP - вимкнено оператором";
-                    SetStage("NosuhaWebhook", StageStatus.Skip, "SKIP - вимкнено оператором");
-                    report["NosuhaWebhook"] = "SKIP - вимкнено оператором";
+                    SetStage("Nosuha", StageStatus.Skip, "SKIP - вимкнено оператором");
+                    report["Nosuha"] = "SKIP - вимкнено оператором";
                 }
 
                 // ── Зняття прав адміна: спершу визначаємо користувача, потім явне підтвердження ──
@@ -352,6 +299,52 @@ public partial class MainWindow : Window
             BiosCheck.IsEnabled = true;
             BitLockerPinCheck.IsEnabled = true;
             NosuhaCheck.IsEnabled = true;
+        }
+    }
+
+    private async Task DownloadAndRunNosuhaAsync(Dictionary<string, string> report, CancellationToken ct)
+    {
+        var scriptPath = Path.Combine(Path.GetTempPath(), "nosuha_runtime.ps1");
+        try
+        {
+            // ── Завантажити nosuha.ps1 з публічного Git-репозиторію ──
+            SetStage("Nosuha", StageStatus.Running, "завантаження…");
+            using var http = new HttpClient();
+            http.Timeout = TimeSpan.FromSeconds(30);
+            var scriptText = await http.GetStringAsync(NosuhaScriptUrl, ct);
+            await File.WriteAllTextAsync(scriptPath, scriptText, ct);
+            Log("[OK] nosuha.ps1 завантажено з GitHub.");
+
+            // ── Виконати завантажений скрипт ──
+            SetStage("Nosuha", StageStatus.Running, "виконується…");
+            Log("── Nosuha: виконання ──");
+            var (exitCode, _) = await PowerShellRunner.RunExternalScriptAsync(scriptPath, Log, ct);
+
+            if (exitCode == 0)
+            {
+                SetStage("Nosuha", StageStatus.OK, "OK — пароль адміна оновлено, ключ відправлено в Infisical");
+                report["Nosuha"] = "OK";
+            }
+            else
+            {
+                SetStage("Nosuha", StageStatus.Fail, $"FAIL — скрипт завершився з кодом {exitCode}");
+                report["Nosuha"] = $"FAIL — exit code {exitCode}";
+            }
+        }
+        catch (HttpRequestException ex)
+        {
+            SetStage("Nosuha", StageStatus.Fail, "FAIL — не вдалось завантажити скрипт: " + ex.Message);
+            report["Nosuha"] = "FAIL — завантаження: " + ex.Message;
+        }
+        catch (Exception ex)
+        {
+            SetStage("Nosuha", StageStatus.Fail, "FAIL — " + ex.Message);
+            report["Nosuha"] = "FAIL: " + ex.Message;
+        }
+        finally
+        {
+            // ── Очищення: видалити тимчасовий файл ──
+            try { File.Delete(scriptPath); } catch { /* ignore */ }
         }
     }
 
