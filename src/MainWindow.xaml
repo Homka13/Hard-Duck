@@ -26,20 +26,40 @@
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <StackPanel Grid.Column="0">
-                <TextBlock Text="HARD-DUCK" FontSize="26" FontWeight="Bold"
-                           Foreground="{StaticResource AccentBrush}" FontFamily="Consolas"
-                           LetterSpacing="3"/>
-                <TextBlock x:Name="ComputerText"
-                           Foreground="{StaticResource MaterialDesignBodyLight}"
-                           FontSize="12" Margin="0,2,0,0"/>
+            <StackPanel Grid.Column="0" Orientation="Horizontal">
+                <!-- Neon duck logo -->
+                <Viewbox Width="36" Height="36" Margin="0,0,10,0">
+                    <Path Data="{StaticResource DuckGeometry}"
+                          Fill="{StaticResource AccentBrush}"
+                          Stroke="{StaticResource AccentBrush}"
+                          StrokeThickness="1.5"
+                          RenderTransformOrigin="0.5,0.5">
+                        <Path.Effect>
+                            <DropShadowEffect Color="#FFB300" BlurRadius="8"
+                                              ShadowDepth="0" Opacity="0.8"/>
+                        </Path.Effect>
+                    </Path>
+                </Viewbox>
+                <StackPanel>
+                    <TextBlock Text="HARD-DUCK" FontSize="26" FontWeight="Bold"
+                               Foreground="{StaticResource AccentBrush}" FontFamily="Consolas"
+                               LetterSpacing="3"/>
+                    <TextBlock x:Name="ComputerText"
+                               Foreground="{StaticResource MaterialDesignBodyLight}"
+                               FontSize="12" Margin="0,2,0,0"/>
+                </StackPanel>
             </StackPanel>
             <Button x:Name="UpdateButton" Grid.Column="1"
                     Style="{StaticResource MaterialDesignFlatButton}"
-                    Content="ОНОВИТИ"
                     Visibility="Collapsed" VerticalAlignment="Top"
                     Foreground="{StaticResource StatusOkBrush}"
-                    Click="OnUpdate"/>
+                    Click="OnUpdate">
+                <StackPanel Orientation="Horizontal">
+                    <materialDesign:PackIcon Kind="Download" Width="16" Height="16"
+                                             VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBlock Text="ОНОВИТИ"/>
+                </StackPanel>
+            </Button>
         </Grid>
 
         <!-- ── Картка 1: Апаратна безпека ── -->
@@ -50,9 +70,13 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <TextBlock Grid.Row="0" Text="АПАРАТНА БЕЗПЕКА" FontSize="11" FontWeight="Bold"
-                           Foreground="{StaticResource AccentBrush}" LetterSpacing="2"
-                           Margin="0,0,0,12"/>
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+                    <materialDesign:PackIcon Kind="ShieldLock" Width="15" Height="15"
+                                             Foreground="{StaticResource AccentBrush}"
+                                             VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBlock Text="АПАРАТНА БЕЗПЕКА" FontSize="11" FontWeight="Bold"
+                               Foreground="{StaticResource AccentBrush}" LetterSpacing="2"/>
+                </StackPanel>
                 <UniformGrid Grid.Row="1" Columns="3" HorizontalAlignment="Left">
                     <StackPanel Orientation="Horizontal" Margin="0,0,30,0">
                         <ToggleButton x:Name="SecureBootToggle" IsChecked="True"
@@ -93,9 +117,13 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <TextBlock Grid.Row="0" Text="КОНТРОЛЬ ДОСТУПУ" FontSize="11" FontWeight="Bold"
-                           Foreground="{StaticResource AccentBrush}" LetterSpacing="2"
-                           Margin="0,0,0,12"/>
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+                    <materialDesign:PackIcon Kind="AccountKey" Width="15" Height="15"
+                                             Foreground="{StaticResource AccentBrush}"
+                                             VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBlock Text="КОНТРОЛЬ ДОСТУПУ" FontSize="11" FontWeight="Bold"
+                               Foreground="{StaticResource AccentBrush}" LetterSpacing="2"/>
+                </StackPanel>
                 <UniformGrid Grid.Row="1" Columns="2" HorizontalAlignment="Left">
                     <StackPanel Orientation="Horizontal" Margin="0,0,30,0">
                         <ToggleButton x:Name="UsbToggle" IsChecked="True"
@@ -129,9 +157,13 @@
                     <RowDefinition Height="Auto"/>
                     <RowDefinition Height="Auto"/>
                 </Grid.RowDefinitions>
-                <TextBlock Grid.Row="0" Text="ВІДПОВІДНІСТЬ СИСТЕМИ" FontSize="11" FontWeight="Bold"
-                           Foreground="{StaticResource AccentBrush}" LetterSpacing="2"
-                           Margin="0,0,0,12"/>
+                <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="0,0,0,12">
+                    <materialDesign:PackIcon Kind="ClipboardCheck" Width="15" Height="15"
+                                             Foreground="{StaticResource AccentBrush}"
+                                             VerticalAlignment="Center" Margin="0,0,8,0"/>
+                    <TextBlock Text="ВІДПОВІДНІСТЬ СИСТЕМИ" FontSize="11" FontWeight="Bold"
+                               Foreground="{StaticResource AccentBrush}" LetterSpacing="2"/>
+                </StackPanel>
                 <UniformGrid Grid.Row="1" Columns="2" HorizontalAlignment="Left">
                     <StackPanel Orientation="Horizontal" Margin="0,0,30,0">
                         <ToggleButton x:Name="LapsToggle"
@@ -143,6 +175,9 @@
                                    Foreground="{StaticResource MaterialDesignBody}"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal">
+                        <materialDesign:PackIcon Kind="PowerSleep" Width="16" Height="16"
+                                                 Foreground="{StaticResource MaterialDesignBodyLight}"
+                                                 VerticalAlignment="Center" Margin="0,0,6,0"/>
                         <TextBlock Text="Гібернація" VerticalAlignment="Center" Margin="0,0,8,0"
                                    Foreground="{StaticResource MaterialDesignBodyLight}"/>
                         <TextBlock Text="(завжди)" VerticalAlignment="Center" FontSize="11"
@@ -167,19 +202,41 @@
                     <ItemsControl x:Name="StageList">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border Padding="12,9" Margin="6,2"
+                                <Border Padding="10,7" Margin="6,2"
                                         Background="{DynamicResource MaterialDesignCardBackground}"
                                         CornerRadius="4">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
-                                            <ColumnDefinition Width="12"/>
-                                            <ColumnDefinition Width="12"/>
+                                            <ColumnDefinition Width="24"/>
                                             <ColumnDefinition Width="*"/>
                                         </Grid.ColumnDefinitions>
-                                        <Ellipse Grid.Column="0" Width="9" Height="9"
-                                                 VerticalAlignment="Center"
-                                                 Fill="{Binding StatusBrush}"/>
-                                        <StackPanel Grid.Column="2">
+                                        <materialDesign:PackIcon Grid.Column="0"
+                                            Kind="{Binding StatusIcon}"
+                                            Width="18" Height="18"
+                                            VerticalAlignment="Center"
+                                            Foreground="{Binding StatusBrush}">
+                                            <materialDesign:PackIcon.RenderTransform>
+                                                <RotateTransform Angle="0"/>
+                                            </materialDesign:PackIcon.RenderTransform>
+                                            <materialDesign:PackIcon.Style>
+                                                <Style TargetType="materialDesign:PackIcon">
+                                                    <Style.Triggers>
+                                                        <DataTrigger Binding="{Binding Status}" Value="Running">
+                                                            <DataTrigger.EnterActions>
+                                                                <BeginStoryboard>
+                                                                    <Storyboard RepeatBehavior="Forever">
+                                                                        <DoubleAnimation
+                                                                            Storyboard.TargetProperty="(UIElement.RenderTransform).(RotateTransform.Angle)"
+                                                                            From="0" To="360" Duration="0:0:1"/>
+                                                                    </Storyboard>
+                                                                </BeginStoryboard>
+                                                            </DataTrigger.EnterActions>
+                                                        </DataTrigger>
+                                                    </Style.Triggers>
+                                                </Style>
+                                            </materialDesign:PackIcon.Style>
+                                        </materialDesign:PackIcon>
+                                        <StackPanel Grid.Column="1" Margin="8,0,0,0">
                                             <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
                                                        FontSize="13"/>
                                             <TextBlock Text="{Binding StatusText}"
@@ -203,9 +260,14 @@
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Text="ТЕРМІНАЛ"
-                               Foreground="{StaticResource MaterialDesignBodyLight}"
-                               FontSize="10" LetterSpacing="2" Margin="8,6,0,4"/>
+                    <StackPanel Grid.Row="0" Orientation="Horizontal" Margin="8,6,0,4">
+                        <materialDesign:PackIcon Kind="Console" Width="13" Height="13"
+                                                 Foreground="{StaticResource MaterialDesignBodyLight}"
+                                                 VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock Text="ТЕРМІНАЛ"
+                                   Foreground="{StaticResource MaterialDesignBodyLight}"
+                                   FontSize="10" LetterSpacing="2"/>
+                    </StackPanel>
                     <RichTextBox Grid.Row="1" x:Name="LogBox"
                                  IsReadOnly="True"
                                  VerticalScrollBarVisibility="Auto"
@@ -220,39 +282,53 @@
         </Grid>
 
         <!-- ── Нижня панель: прогрес, кнопки ── -->
-        <Grid Grid.Row="5" Margin="0,14,0,0">
-            <Grid.ColumnDefinitions>
-                <ColumnDefinition Width="Auto"/>
-                <ColumnDefinition Width="*"/>
-                <ColumnDefinition Width="Auto"/>
-            </Grid.ColumnDefinitions>
+        <materialDesign:Card Grid.Row="5" Margin="0,14,0,0" Padding="12,8"
+                             materialDesign:ShadowAssist.ShadowDepth="Depth1">
+            <Grid>
+                <Grid.ColumnDefinitions>
+                    <ColumnDefinition Width="Auto"/>
+                    <ColumnDefinition Width="*"/>
+                    <ColumnDefinition Width="Auto"/>
+                </Grid.ColumnDefinitions>
 
-            <!-- Індикатор прогресу -->
-            <ProgressBar Grid.Column="0" x:Name="RunProgress"
-                         Style="{StaticResource MaterialDesignLinearProgressBar}"
-                         IsIndeterminate="False" Visibility="Collapsed"
-                         Width="200" VerticalAlignment="Center" Margin="0,0,12,0"/>
+                <ProgressBar Grid.Column="0" x:Name="RunProgress"
+                             Style="{StaticResource MaterialDesignLinearProgressBar}"
+                             IsIndeterminate="False" Visibility="Collapsed"
+                             Width="180" VerticalAlignment="Center" Margin="0,0,12,0"/>
 
-            <TextBlock x:Name="BottomStatus" Grid.Column="1"
-                       Foreground="{StaticResource MaterialDesignBodyLight}"
-                       VerticalAlignment="Center" TextWrapping="Wrap"
-                       FontSize="12"/>
+                <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Center">
+                    <materialDesign:PackIcon x:Name="StatusLockIcon" Kind="LockOutline"
+                                             Width="14" Height="14"
+                                             Foreground="{StaticResource MaterialDesignBodyLight}"
+                                             VerticalAlignment="Center" Margin="0,0,6,0"/>
+                    <TextBlock x:Name="BottomStatus"
+                               Foreground="{StaticResource MaterialDesignBodyLight}"
+                               VerticalAlignment="Center" TextWrapping="Wrap"
+                               FontSize="12"/>
+                </StackPanel>
 
-            <StackPanel Grid.Column="2" Orientation="Horizontal">
-                <Button x:Name="RebootButton"
-                        Style="{StaticResource MaterialDesignFlatButton}"
-                        Content="ПЕРЕЗАВАНТАЖИТИ"
-                        Foreground="{StaticResource MaterialDesignBodyLight}"
-                        Visibility="Collapsed" Click="OnReboot"
-                        Margin="0,0,10,0"/>
-                <Button x:Name="RunButton"
-                        Style="{StaticResource MaterialDesignFloatingActionButton}"
-                        ToolTip="Запустити захист"
-                        Width="56" Height="56"
-                        Click="OnRun">
-                    <materialDesign:PackIcon Kind="ShieldCheck" Width="28" Height="28"/>
-                </Button>
-            </StackPanel>
-        </Grid>
+                <StackPanel Grid.Column="2" Orientation="Horizontal">
+                    <Button x:Name="RebootButton"
+                            Style="{StaticResource MaterialDesignFlatButton}"
+                            Foreground="{StaticResource MaterialDesignBodyLight}"
+                            Visibility="Collapsed" Click="OnReboot"
+                            Margin="0,0,10,0">
+                        <StackPanel Orientation="Horizontal">
+                            <materialDesign:PackIcon Kind="Restart" Width="16" Height="16"
+                                                     VerticalAlignment="Center" Margin="0,0,6,0"/>
+                            <TextBlock Text="ПЕРЕЗАВАНТАЖИТИ"/>
+                        </StackPanel>
+                    </Button>
+                    <Button x:Name="RunButton"
+                            Style="{StaticResource MaterialDesignFloatingActionButton}"
+                            ToolTip="Запустити захист"
+                            Width="56" Height="56"
+                            Click="OnRun">
+                        <materialDesign:PackIcon x:Name="RunFabIcon"
+                            Kind="ShieldCheck" Width="28" Height="28"/>
+                    </Button>
+                </StackPanel>
+            </Grid>
+        </materialDesign:Card>
     </Grid>
 </Window>

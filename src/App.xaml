@@ -26,6 +26,15 @@
                 <SolidColorBrush x:Key="StatusFailBrush"     Color="#E04F4F" />
                 <SolidColorBrush x:Key="StatusInfoBrush"     Color="#4C8DF6" />
                 <SolidColorBrush x:Key="AccentBrush"         Color="#FFB300" />
+
+                <!-- Neon amber duck logo geometry -->
+                <Geometry x:Key="DuckGeometry">
+                    M22,26 C22,22 24,18 28,15 C32,12 38,10 44,10 C50,10 56,12 58,16
+                    C60,20 58,26 54,28 C50,30 44,30 40,28 C38,30 36,33 36,36
+                    C36,38 34,40 30,40 C28,40 26,38 26,36 C26,34 24,32 22,30
+                    C20,32 18,34 16,34 C14,34 14,32 16,30 C18,28 20,26 22,26 Z
+                    M30,20 C28,20 26,18 26,16 C26,14 28,14 30,16 C32,18 32,20 30,20 Z
+                </Geometry>
             </ResourceDictionary.MergedDictionaries>
         </ResourceDictionary>
     </Application.Resources>

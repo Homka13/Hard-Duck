@@ -129,6 +129,10 @@ public partial class MainWindow : Window
         BitLockerPinToggle.IsEnabled = false;
         HardDuckToggle.IsEnabled = false;
         RebootButton.Visibility = Visibility.Collapsed;
+
+        // FAB: змінити іконку на спінер
+        RunFabIcon.Kind = MaterialDesignThemes.Wpf.PackIconKind.Sync;
+        StatusLockIcon.Kind = MaterialDesignThemes.Wpf.PackIconKind.LockOpenOutline;
         LogBox.Document.Blocks.Clear();
         foreach (var s in _stages) { s.Status = StageStatus.Pending; s.Summary = "очікує"; }
 
@@ -311,8 +315,9 @@ public partial class MainWindow : Window
         {
             RunProgress.IsIndeterminate = false;
             RunProgress.Visibility = Visibility.Collapsed;
+            RunFabIcon.Kind = MaterialDesignThemes.Wpf.PackIconKind.ShieldCheck;
+            StatusLockIcon.Kind = MaterialDesignThemes.Wpf.PackIconKind.LockOutline;
             RunButton.IsEnabled = true;
-            RunButton.Content = "Запустити повторно";
             SecureBootToggle.IsEnabled = true;
             LapsToggle.IsEnabled = true;
             UsbToggle.IsEnabled = true;

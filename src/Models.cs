@@ -33,7 +33,7 @@ public sealed class StageVm : INotifyPropertyChanged
     public StageStatus Status
     {
         get => _status;
-        set { _status = value; Raise(); Raise(nameof(StatusText)); Raise(nameof(StatusBrush)); }
+        set { _status = value; Raise(); Raise(nameof(StatusText)); Raise(nameof(StatusBrush)); Raise(nameof(StatusIcon)); }
     }
 
     private string _summary = "очікує";
@@ -42,6 +42,16 @@ public sealed class StageVm : INotifyPropertyChanged
         get => _summary;
         set { _summary = value; Raise(); Raise(nameof(StatusText)); }
     }
+
+    public string StatusIcon => Status switch
+    {
+        StageStatus.Ok      => "CheckCircle",
+        StageStatus.Warn    => "Alert",
+        StageStatus.Fail    => "CloseCircle",
+        StageStatus.Running => "Sync",
+        StageStatus.Skip    => "MinusCircle",
+        _                   => "CircleOutline"
+    };
 
     public string StatusText => Status switch
     {
