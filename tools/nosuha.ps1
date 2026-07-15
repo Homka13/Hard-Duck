@@ -104,9 +104,8 @@ if ($CurrentUser -eq 'UNKNOWN' -or $CurrentUser -match '\\SYSTEM$|^NT AUTHORITY\
 }
 
 # Якщо після всіх перевірок користувач досі не визначений —
-# використовуємо 'local' як резервне значення за замовчуванням.
+# мовчки призначаємо 'local' (без попереджень у консоль).
 if ([string]::IsNullOrWhiteSpace($CurrentUser) -or $CurrentUser -eq 'UNKNOWN') {
-    Write-Host '[INFO] No standard user detected. Defaulting to local admin context.'
     $CurrentUser = 'local'
 }
 
@@ -242,9 +241,15 @@ $DailyUser = $CurrentUser
 
 # Видобування ключа відновлення BitLocker
 Write-Host "[INFO] Reading BitLocker Recovery Key..." -ForegroundColor Cyan
-$RecoveryKey = (Get-BitLockerVolume -MountPoint $env:SystemDrive).KeyProtector |
-    Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' } |
-    Select-Object -ExpandProperty RecoveryPassword
+try {
+    $RecoveryKey = (Get-BitLockerVolume -MountPoint $env:SystemDrive -ErrorAction Stop).KeyProtector |
+        Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' } |
+        Select-Object -ExpandProperty RecoveryPassword
+}
+catch {
+    $RecoveryKey = $null
+    Write-Host "[WARNING] Could not read BitLocker volume: $_" -ForegroundColor Yellow
+}
 
 if ([string]::IsNullOrWhiteSpace($RecoveryKey)) {
     Write-Host "[WARNING] BitLocker Recovery Key is empty. Drive might not be fully encrypted yet." -ForegroundColor Yellow
