@@ -122,9 +122,12 @@ try {
 }
 
 # ----------------------------------------------------------------
-# 5. BitLocker — перевірка статусу, увімкнення та отримання ключа
-#    Уникає помилки 0x80310031: перед додаванням протектора перевіряє,
-#    чи RecoveryPassword уже існує. Якщо так — перевикористовує.
+# 5. BitLocker — трифазна обробка:
+#    5a. Увімкнення (якщо розшифровано) або SKIP з повідомленням.
+#    5b. Забезпечення наявності RecoveryPassword протектора.
+#    5c. Примусове отримання ключа через Get-BitLockerKeyProtector —
+#        виконується ЗАВЖДИ, незалежно від того, чи BitLocker щойно
+#        увімкнено, чи він уже працював.
 #    ВАЖЛИВО: KeyProtector.RecoveryPassword завжди порожнє в об'єктах
 #    Get-BitLockerVolume. Для отримання 48-значного ключа потрібно
 #    пропустити протектор через Get-BitLockerKeyProtector.
@@ -158,55 +161,51 @@ try {
                 Select-Object -First 1
         }
     }
+    else {
+        Write-Host 'SKIP — BitLocker вже увімкнено на C:.'
+    }
 
-    # ── Крок 5b: отримати ключ через Get-BitLockerKeyProtector ──
+    # ── Крок 5b: переконатись, що RecoveryPassword протектор існує ──
     $blVolume = Get-BitLockerVolume -MountPoint 'C:'
     $existingKp = $blVolume.KeyProtector |
         Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' } |
         Select-Object -First 1
 
-    if ($existingKp) {
-        # Протектор уже існує — примусово читаємо RecoveryPassword
-        $protectorDetails = $existingKp | Get-BitLockerKeyProtector
-        $RecoveryKey = $protectorDetails.RecoveryPassword
-        Write-Host "Ключ відновлення BitLocker отримано (протектор ID: $($existingKp.KeyProtectorId))."
-    }
-    else {
+    if (-not $existingKp) {
         # Протектора немає — безпечно додаємо новий
         Write-Host 'Протектор RecoveryPassword відсутній — додаю...'
         try {
-            $addedKp = Add-BitLockerKeyProtector -MountPoint 'C:' `
+            $null = Add-BitLockerKeyProtector -MountPoint 'C:' `
                 -RecoveryPasswordProtector -ErrorAction Stop
-
-            # Повторне читання тому та примусове отримання RecoveryPassword
             Start-Sleep -Seconds 3
-            $blVolume = Get-BitLockerVolume -MountPoint 'C:'
-            $reReadKp = $blVolume.KeyProtector |
-                Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' } |
-                Select-Object -First 1
-
-            if ($reReadKp) {
-                $protectorDetails = $reReadKp | Get-BitLockerKeyProtector
-                $RecoveryKey = $protectorDetails.RecoveryPassword
-                Write-Host "Протектор RecoveryPassword успішно додано (ID: $($reReadKp.KeyProtectorId))."
-            }
-            else {
-                Write-Warning 'Протектор додано, але не вдалося отримати RecoveryPassword після додавання.'
-            }
+            Write-Host 'Протектор RecoveryPassword додано.'
         }
         catch {
             Write-Warning "Не вдалося додати протектор RecoveryPassword: $_"
         }
+    }
+
+    # ── Крок 5c: ПРИМУСОВЕ отримання ключа (завжди, незалежно від 5a) ──
+    $blVolume = Get-BitLockerVolume -MountPoint 'C:'
+    $protector = $blVolume.KeyProtector |
+        Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' } |
+        Select-Object -First 1
+
+    if ($protector) {
+        $protectorDetails = $protector | Get-BitLockerKeyProtector
+        $RecoveryKey = $protectorDetails.RecoveryPassword
+        Write-Host "Ключ відновлення BitLocker отримано (протектор ID: $($protector.KeyProtectorId))."
     }
 }
 catch {
     Write-Warning "Критична помилка операції BitLocker: $_"
 }
 
-# Перевірка: ключ відновлення обов'язковий перед відправкою в Infisical
+# ── Крок 5d: валідація (CRITICAL попередження, але скрипт продовжує) ──
 if (-not $RecoveryKey) {
-    Write-Error 'CRITICAL: BitLocker recovery key could not be retrieved.'
-    exit 1
+    Write-Warning 'CRITICAL: BitLocker recovery key could not be retrieved.'
+    Write-Warning 'Секрет буде відправлено в Infisical з BitLockerKey = N/A.'
+    $RecoveryKey = 'N/A'
 }
 
 # ----------------------------------------------------------------
