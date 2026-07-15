@@ -7,12 +7,12 @@
     <Nullable>enable</Nullable>
     <ImplicitUsings>enable</ImplicitUsings>
     <LangVersion>latest</LangVersion>
-    <RootNamespace>HardenWorkstation</RootNamespace>
-    <AssemblyName>HardenWorkstation</AssemblyName>
+    <RootNamespace>HardDuck</RootNamespace>
+    <AssemblyName>Hard-Duck</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Version>1.0.7</Version>
-    <Product>Захист робочої станції</Product>
-    <Description>BitLocker (TPM+PIN), ескроу ключів в Entra ID, гібернація, BIOS-пароль (Lenovo), Windows LAPS</Description>
+    <Product>Hard-Duck — Захист робочої станції</Product>
+    <Description>BitLocker (TPM+PIN), ескроу ключів в Entra ID, гібернація, BIOS-пароль (Lenovo), Windows LAPS, Nosuha ZTP</Description>
   </PropertyGroup>
 
 </Project>

@@ -1,7 +1,7 @@
 ﻿<#
     Decrypt-BiosPassword.ps1
     Для тих 1-2 людей, у кого є PRIVATE-частина сертифіката "BIOS Password Escrow".
-    Читає зашифрований файл, який HardenWorkstation.exe залишив для конкретної машини (C:\ProgramData\ITSecurity\bios-<комп'ютер>-<серійник>.txt), і показує пароль.
+    Читає зашифрований файл, який Hard-Duck.exe залишив для конкретної машини (C:\ProgramData\ITSecurity\bios-<комп'ютер>-<серійник>.txt), і показує пароль.
 
     Приватний сертифікат має бути ІМПОРТОВАНИЙ у Cert:\CurrentUser\My на машині,
     з якої ви це запускаєте (Import-PfxCertificate -FilePath escrow.pfx -CertStoreLocation Cert:\CurrentUser\My).

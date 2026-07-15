@@ -1,4 +1,4 @@
-namespace HardenWorkstation;
+namespace HardDuck;
 
 /// <summary>
 /// PowerShell-логіка етапів. Кожен скрипт пише людський лог у stdout,
@@ -403,6 +403,159 @@ public static class Scripts
                 Emit 'OK' ("OK (" + $user + ")")
             } catch {
                 Write-Output "[X] Не вдалось прибрати права у '$user': $($_.Exception.Message)"
+                Emit 'FAIL' ("FAIL: " + $_.Exception.Message)
+            }
+        }
+        Main
+        """;
+
+    // ────────────────────────────────────────────────────────────
+    //  Nosuha / ZTP webhook-орієнтовані етапи
+    // ────────────────────────────────────────────────────────────
+
+    /// <summary>
+    /// Генерує криптостійкий 12-значний пароль, скидає його на вбудованого
+    /// Administrator (SID *-500), вмикає обліковий запис і повертає JSON:
+    /// {"password":"...", "computer":"...", "serial":"...", "user":"..."}
+    /// </summary>
+    public const string NosuhaAdminPassword = Prolog + """
+        function Main {
+            # ── Машинна інформація ──
+            $computer = $env:COMPUTERNAME
+            try { $serial = (Get-CimInstance Win32_BIOS).SerialNumber.Trim() } catch { $serial = 'UNKNOWN' }
+            $loggedOn = (Get-CimInstance Win32_ComputerSystem).UserName
+            if (-not $loggedOn) { $loggedOn = 'UNKNOWN' }
+            # Спробувати дістати повне ім'я
+            if ($loggedOn -match '^(.+)\\(.+)$') {
+                try {
+                    $ua = Get-CimInstance Win32_UserAccount `
+                        -Filter "Domain = '$($Matches[1])' AND Name = '$($Matches[2])'" `
+                        -ErrorAction SilentlyContinue
+                    if ($ua -and $ua.FullName) { $loggedOn = "$($ua.FullName) ($loggedOn)" }
+                } catch { }
+            }
+
+            # ── Генерація пароля ──
+            $upper   = 'ABCDEFGHJKMNPQRSTUVWXYZ'.ToCharArray()
+            $lower   = 'abcdefghjkmnpqrstuvwxyz'.ToCharArray()
+            $digits  = '23456789'.ToCharArray()
+            $special = '!@#$%&*-_+=?'.ToCharArray()
+            $pool    = $upper + $lower + $digits + $special
+            $rng     = [System.Security.Cryptography.RNGCryptoServiceProvider]::new()
+            $bytes   = [byte[]]::new(12)
+
+            $chars = @(
+                $upper[0..($rng.GetBytes($bytes); $bytes[0] % $upper.Length)][0],
+                $lower[0..($rng.GetBytes($bytes); $bytes[0] % $lower.Length)][0],
+                $digits[0..($rng.GetBytes($bytes); $bytes[0] % $digits.Length)][0],
+                $special[0..($rng.GetBytes($bytes); $bytes[0] % $special.Length)][0]
+            )
+            for ($i = 4; $i -lt 12; $i++) {
+                $rng.GetBytes($bytes)
+                $chars += $pool[$bytes[0] % $pool.Length]
+            }
+            $rng.Dispose()
+            $random = [System.Random]::new()
+            $password = ($chars | Sort-Object { $random.Next() }) -join ''
+
+            # ── Знайти вбудованого Administrator за SID *-500 ──
+            $adminSid = (Get-CimInstance -ClassName Win32_UserAccount `
+                -Filter "SID LIKE '%-500' AND LocalAccount = TRUE").SID
+            if (-not $adminSid) {
+                Write-Output "[X] Вбудований Administrator (SID *-500) не знайдено."
+                Emit 'FAIL' 'FAIL - обліковий запис адміністратора не знайдено'
+                return
+            }
+
+            $secureSid = [System.Security.Principal.SecurityIdentifier]::new($adminSid)
+            $adminName = $secureSid.Translate([System.Security.Principal.NTAccount]).Value.Split('\')[-1]
+
+            try {
+                $adm = [ADSI]"WinNT://$computer/$adminName,user"
+                $adm.SetPassword($password)
+                $adm.SetInfo()
+
+                $flags = $adm.UserFlags[0]
+                if ($flags -band 0x0002) {
+                    $adm.UserFlags = $flags -bxor 0x0002
+                    $adm.SetInfo()
+                }
+                Write-Output "[OK] Пароль '$adminName' оновлено, обліковий запис увімкнено."
+
+                $result = @{
+                    password = $password
+                    computer = $computer
+                    serial   = $serial
+                    user     = $loggedOn
+                } | ConvertTo-Json -Compress
+                Emit 'OK' $result
+            } catch {
+                Write-Output "[X] Помилка скидання пароля '$adminName': $($_.Exception.Message)"
+                Emit 'FAIL' ("FAIL: " + $_.Exception.Message)
+            }
+        }
+        Main
+        """;
+
+    /// <summary>
+    /// Дістає BitLocker RecoveryPassword-протектор для диска C:.
+    /// Повертає 48-значний ключ у summary або порожній рядок при SKIP.
+    /// </summary>
+    public const string NosuhaGetRecoveryKey = Prolog + """
+        function Main {
+            Import-Module BitLocker -ErrorAction SilentlyContinue
+            try {
+                $vol = Get-BitLockerVolume -MountPoint 'C:' -ErrorAction Stop
+                $kp = $vol.KeyProtector |
+                    Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' } |
+                    Select-Object -First 1
+                if ($kp) {
+                    Write-Output "[OK] BitLocker recovery-ключ отримано."
+                    Emit 'OK' $kp.RecoveryPassword
+                } else {
+                    Write-Output "[!] RecoveryPassword-протектор відсутній на C:."
+                    Emit 'SKIP' ''
+                }
+            } catch {
+                Write-Output "[X] Не вдалось отримати BitLocker recovery-ключ: $($_.Exception.Message)"
+                Emit 'FAIL' ''
+            }
+        }
+        Main
+        """;
+
+    /// <summary>
+    /// Надсилає зібрані дані на Google Apps Script webhook.
+    /// Рядок 1 stdin — URL вебхука (якщо порожній — значення за замовчуванням).
+    /// Рядок 2 stdin — JSON із полями: ComputerName, SerialNumber, LoggedInUser,
+    /// AdminPassword, BitLockerRecoveryKey, Timestamp.
+    /// </summary>
+    public const string NosuhaSendToWebhook = Prolog + """
+        function Main {
+            $webhookUrl = [Console]::In.ReadLine()
+            $jsonPayload = [Console]::In.ReadLine()
+
+            if ([string]::IsNullOrWhiteSpace($jsonPayload)) {
+                Write-Output "[X] Порожні дані для вебхука."
+                Emit 'FAIL' 'FAIL - немає даних для відправки'
+                return
+            }
+
+            if ([string]::IsNullOrWhiteSpace($webhookUrl)) {
+                $webhookUrl = 'https://script.google.com/macros/s/YOUR_ID/exec'
+            }
+
+            try {
+                Write-Output "[i] Надсилання даних на webhook..."
+                $response = Invoke-RestMethod -Uri $webhookUrl `
+                    -Method Post `
+                    -Body $jsonPayload `
+                    -ContentType 'application/json; charset=utf-8' `
+                    -ErrorAction Stop
+                Write-Output "[OK] Webhook POST успішно: $($response | ConvertTo-Json -Compress)"
+                Emit 'OK' 'OK'
+            } catch {
+                Write-Output "[X] Помилка відправки на webhook: $($_.Exception.Message)"
                 Emit 'FAIL' ("FAIL: " + $_.Exception.Message)
             }
         }

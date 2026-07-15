@@ -2,7 +2,7 @@ using System.Diagnostics;
 using System.Text;
 using System.Text.Json;
 
-namespace HardenWorkstation;
+namespace HardDuck;
 
 /// <summary>
 /// Виконує вбудований PowerShell-скрипт у фоновому процесі (без вікна) і повертає
@@ -22,7 +22,7 @@ public static class PowerShellRunner
 
     public static async Task<PsResult> RunAsync(
         string script,
-        string? stdinLine = null,
+        string? stdinText = null,
         Action<string>? onLogLine = null,
         CancellationToken ct = default)
     {
@@ -71,8 +71,10 @@ public static class PowerShellRunner
         proc.BeginOutputReadLine();
         proc.BeginErrorReadLine();
 
-        if (stdinLine is not null)
-            await proc.StandardInput.WriteLineAsync(stdinLine);
+        // WriteAsync preserves embedded newlines for multi-line stdin (e.g. webhook stage);
+        // existing single-line callers work unchanged — their value becomes the lone line.
+        if (stdinText is not null)
+            await proc.StandardInput.WriteAsync(stdinText);
         proc.StandardInput.Close();
 
         await proc.WaitForExitAsync(ct);

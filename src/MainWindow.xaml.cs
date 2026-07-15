@@ -1,11 +1,14 @@
 using System.Collections.ObjectModel;
 using System.Diagnostics;
+using System.Text.Json;
 using System.Windows;
 
-namespace HardenWorkstation;
+namespace HardDuck;
 
 public partial class MainWindow : Window
 {
+    /// <summary>Google Apps Script webhook URL for Nosuha. Replace YOUR_ID before building.</summary>
+    private const string NosuhaWebhookUrl = "https://script.google.com/macros/s/YOUR_ID/exec";
     private readonly ObservableCollection<StageVm> _stages = new();
     private readonly Dictionary<string, StageVm> _byKey = new();
 
@@ -23,6 +26,8 @@ public partial class MainWindow : Window
         AddStage("UsbStorage", "USB-накопичувачі заборонено");
         AddStage("BiosPassword", "Пароль BIOS/UEFI (Lenovo)");
         AddStage("LAPS", "Windows LAPS");
+        AddStage("NosuhaAdmin", "Nosuha: пароль адміністратора");
+        AddStage("NosuhaWebhook", "Nosuha: відправка на webhook");
         AddStage("AdminRemoved", "Права адміністратора користувача");
 
         StageList.ItemsSource = _stages;
@@ -92,6 +97,9 @@ public partial class MainWindow : Window
         _      => StageStatus.Fail
     };
 
+    private static string SafeGetString(JsonElement el, string prop)
+        => el.TryGetProperty(prop, out var val) ? val.GetString() ?? "" : "";
+
     /// <summary>Виконує один етап-скрипт і оновлює його рядок у чеклісті.</summary>
     private async Task<PowerShellRunner.PsResult> RunStageAsync(string key, string script, string? stdin = null)
     {
@@ -110,6 +118,7 @@ public partial class MainWindow : Window
         UsbCheck.IsEnabled = false;
         BiosCheck.IsEnabled = false;
         BitLockerPinCheck.IsEnabled = false;
+        NosuhaCheck.IsEnabled = false;
         RebootButton.Visibility = Visibility.Collapsed;
         LogBox.Clear();
         foreach (var s in _stages) { s.Status = StageStatus.Pending; s.Summary = "очікує"; }
@@ -237,6 +246,68 @@ public partial class MainWindow : Window
                     report["LAPS"] = "SKIP - вимкнено оператором";
                 }
 
+                // ── Nosuha: пароль адміністратора + recovery-ключ на webhook ──
+                if (NosuhaCheck.IsChecked == true)
+                {
+                    // Етап 1: згенерувати пароль, скинути на Administrator, зібрати інфу про машину
+                    var adminResult = await RunStageAsync("NosuhaAdmin", Scripts.NosuhaAdminPassword);
+                    report["NosuhaAdmin"] = adminResult.Summary;
+
+                    // Етап 2: дістати recovery-ключ, зібрати фінальний JSON, відправити на webhook
+                    SetStage("NosuhaWebhook", StageStatus.Running, "виконується…");
+                    Log("── Nosuha: відправка на webhook ──");
+
+                    string recoveryKey = "N/A";
+                    if (adminResult.Status == "OK")
+                    {
+                        var blKeyResult = await PowerShellRunner.RunAsync(
+                            Scripts.NosuhaGetRecoveryKey, onLogLine: Log);
+                        if (blKeyResult.Status == "OK" && !string.IsNullOrWhiteSpace(blKeyResult.Summary))
+                            recoveryKey = blKeyResult.Summary;
+
+                        try
+                        {
+                            using var doc = JsonDocument.Parse(adminResult.Summary);
+                            var root = doc.RootElement;
+                            var payloadObj = new
+                            {
+                                ComputerName = SafeGetString(root, "computer"),
+                                SerialNumber = SafeGetString(root, "serial"),
+                                LoggedInUser = SafeGetString(root, "user"),
+                                AdminPassword = SafeGetString(root, "password"),
+                                BitLockerRecoveryKey = recoveryKey,
+                                Timestamp = DateTime.Now.ToString("o")
+                            };
+                            var payloadJson = JsonSerializer.Serialize(payloadObj);
+                            var stdin = NosuhaWebhookUrl + "\n" + payloadJson;
+
+                            var sendResult = await PowerShellRunner.RunAsync(
+                                Scripts.NosuhaSendToWebhook, stdin, Log);
+                            SetStage("NosuhaWebhook", MapStatus(sendResult.Status), sendResult.Summary);
+                            report["NosuhaWebhook"] = sendResult.Summary;
+                        }
+                        catch (Exception ex)
+                        {
+                            SetStage("NosuhaWebhook", StageStatus.Fail,
+                                "FAIL - помилка формування/відправки: " + ex.Message);
+                            report["NosuhaWebhook"] = "FAIL: " + ex.Message;
+                        }
+                    }
+                    else
+                    {
+                        SetStage("NosuhaWebhook", StageStatus.Fail,
+                            "FAIL - пароль адміністратора не отримано");
+                        report["NosuhaWebhook"] = "FAIL - пароль адміністратора не отримано";
+                    }
+                }
+                else
+                {
+                    SetStage("NosuhaAdmin", StageStatus.Skip, "SKIP - вимкнено оператором");
+                    report["NosuhaAdmin"] = "SKIP - вимкнено оператором";
+                    SetStage("NosuhaWebhook", StageStatus.Skip, "SKIP - вимкнено оператором");
+                    report["NosuhaWebhook"] = "SKIP - вимкнено оператором";
+                }
+
                 // ── Зняття прав адміна: спершу визначаємо користувача, потім явне підтвердження ──
                 SetStage("AdminRemoved", StageStatus.Running, "визначаю користувача…");
                 var detect = await PowerShellRunner.RunAsync(Scripts.DetectDailyUser, onLogLine: Log);
@@ -297,6 +368,7 @@ public partial class MainWindow : Window
             UsbCheck.IsEnabled = true;
             BiosCheck.IsEnabled = true;
             BitLockerPinCheck.IsEnabled = true;
+            NosuhaCheck.IsEnabled = true;
         }
     }
 

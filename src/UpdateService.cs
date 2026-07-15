@@ -7,7 +7,7 @@ using System.Text;
 using System.Text.Json;
 using System.Windows;
 
-namespace HardenWorkstation;
+namespace HardDuck;
 
 /// <summary>
 /// Автооновлення через GitHub Releases:
@@ -30,7 +30,7 @@ public static class UpdateService
     private static HttpClient NewHttp()
     {
         var http = new HttpClient { Timeout = TimeSpan.FromSeconds(30) };
-        http.DefaultRequestHeaders.UserAgent.ParseAdd("HardenWorkstation-Updater");
+        http.DefaultRequestHeaders.UserAgent.ParseAdd("Hard-Duck-Updater");
         http.DefaultRequestHeaders.Accept.ParseAdd("application/vnd.github+json");
         return http;
     }
@@ -58,7 +58,7 @@ public static class UpdateService
             {
                 var name = asset.GetProperty("name").GetString() ?? "";
                 var url = asset.GetProperty("browser_download_url").GetString() ?? "";
-                if (name.Equals("HardenWorkstation.exe", StringComparison.OrdinalIgnoreCase)) exeUrl = url;
+                if (name.Equals("Hard-Duck.exe", StringComparison.OrdinalIgnoreCase)) exeUrl = url;
                 if (name.EndsWith(".sha256", StringComparison.OrdinalIgnoreCase)) shaUrl = url;
             }
             if (exeUrl is null) return null;
@@ -97,7 +97,7 @@ public static class UpdateService
         await File.WriteAllBytesAsync(newPath, bytes);
 
         // Міні-скрипт: чекає виходу застосунку, підміняє EXE і запускає нову версію
-        var cmdPath = Path.Combine(Path.GetTempPath(), "HardenWorkstation-update.cmd");
+        var cmdPath = Path.Combine(Path.GetTempPath(), "Hard-Duck-update.cmd");
         var cmd = new StringBuilder()
             .AppendLine("@echo off")
             .AppendLine("timeout /t 2 /nobreak >nul")

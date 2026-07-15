@@ -1,12 +1,12 @@
 #!/usr/bin/env bash
-# release.sh — Випуск нового релізу HardenWorkstation
+# release.sh — Випуск нового релізу Hard-Duck
 #
 # Використання:
 #   ./tools/release.sh 1.0.7          # створити тег і запушити v1.0.7
 #   ./tools/release.sh 1.0.7 dry-run  # перегляд без пушу
 #
 # Що робить:
-#   1. Оновлює <Version> у src/HardenWorkstation.csproj
+#   1. Оновлює <Version> у src/Hard-Duck.csproj
 #   2. Комітить зміну версії
 #   3. Створює анотований git-тег v<version>
 #   4. Пушить коміт і тег до origin
@@ -19,7 +19,7 @@ set -euo pipefail
 VERSION="${1:?Використання: $0 <version> [dry-run]}"
 DRY_RUN="${2:-}"
 
-CSPROJ="src/HardenWorkstation.csproj"
+CSPROJ="src/Hard-Duck.csproj"
 TAG="v${VERSION}"
 
 if [ ! -f "$CSPROJ" ]; then

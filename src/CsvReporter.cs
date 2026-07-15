@@ -1,7 +1,7 @@
 using System.IO;
 using System.Text;
 
-namespace HardenWorkstation;
+namespace HardDuck;
 
 /// <summary>
 /// Дописує рядок статусу в C:\ProgramData\ITSecurity\harden-status.csv —

@@ -1,6 +1,6 @@
 using System.Windows;
 
-namespace HardenWorkstation;
+namespace HardDuck;
 
 public partial class PinDialog : Window
 {

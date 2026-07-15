@@ -93,7 +93,7 @@ Windows 10/11. Автоматизує ротацію облікових дани
 powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\ITSecurity\nosuha.ps1"
 ```
 
-**Варіант C — через WPF-застосунок HardenWorkstation:**
+**Варіант C — через WPF-застосунок Hard-Duck:**
 Поставте позначку **«Nosuha: пароль адміна + recovery-ключ на webhook»** перед
 запуском процесу захисту. Застосунок виконає етапи Nosuha як частину повного
 конвеєра захисту робочої станції.
@@ -192,7 +192,7 @@ GitHub Actions workflow (`.github/workflows/release.yml`) запускаєтьс
 
 ## Пов'язані інструменти
 
-Цей репозиторій також містить **HardenWorkstation** — десктопний WPF-застосунок
+Цей репозиторій також містить **Hard-Duck** — десктопний WPF-застосунок
 на .NET 8, який виконує повний цикл захисту робочої станції з графічним
 інтерфейсом у вигляді чекліста:
 
@@ -210,7 +210,7 @@ GitHub Actions workflow (`.github/workflows/release.yml`) запускаєтьс
 | **Nosuha** | Ротація пароля адміністратора + ескроу ключа |
 | Права адміністратора | Інтерактивне зняття прав у щоденного користувача |
 
-### Збірка HardenWorkstation
+### Збірка Hard-Duck
 
 Потрібен [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0):
 
@@ -219,7 +219,7 @@ cd src
 dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 ```
 
-Результат: `src\bin\Release\net8.0-windows\win-x64\publish\HardenWorkstation.exe`
+Результат: `src\bin\Release\net8.0-windows\win-x64\publish\Hard-Duck.exe`
 
 Застосунок використовує вбудовані PowerShell-скрипти (`Scripts.cs`), які
 виконуються через `powershell.exe -EncodedCommand`. Секрети (PIN) передаються
