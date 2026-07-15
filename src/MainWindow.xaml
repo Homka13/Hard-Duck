@@ -36,6 +36,12 @@
             <CheckBox x:Name="UsbCheck" Content="Заборонити USB-накопичувачі" IsChecked="True"
                       Foreground="#E8EAF0" VerticalAlignment="Center" Margin="0,0,20,0"
                       ToolTip="Флешки, зовнішні диски, SD-картки, телефони як накопичувач. Клавіатури, миші, принтери, гарнітури працюватимуть."/>
+            <CheckBox x:Name="BiosCheck" Content="Перевіряти пароль BIOS/UEFI" IsChecked="True"
+                      Foreground="#E8EAF0" VerticalAlignment="Center" Margin="0,0,20,0"
+                      ToolTip="Перевіряє через Lenovo WMI, чи встановлено supervisor-пароль. Перший пароль все одно ставиться вручну в BIOS (обмеження прошивки)."/>
+            <CheckBox x:Name="BitLockerPinCheck" Content="Питати PIN BitLocker при вмиканні"
+                      Foreground="#E8EAF0" VerticalAlignment="Center" Margin="0,0,20,0"
+                      ToolTip="Вимкнено (за замовчуванням) — лише TPM: диск шифрується тихо, розблоковується автоматично, без запиту при вмиканні. Увімкніть, щоб додати PIN (TPM+PIN) — надійніше, але Windows питатиме PIN до входу при КОЖНОМУ вмиканні."/>
             <CheckBox x:Name="LapsCheck" Content="Налаштовувати Windows LAPS"
                       Foreground="#E8EAF0" VerticalAlignment="Center"/>
             <TextBlock Text="(потребує Enable LAPS = Yes у тенанті Entra)"

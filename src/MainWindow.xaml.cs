@@ -17,7 +17,7 @@ public partial class MainWindow : Window
         AddStage("SecureBoot", "Secure Boot");
         AddStage("TPM", "TPM 2.0");
         AddStage("EntraJoin", "Приєднання до Entra ID");
-        AddStage("BitLockerPin", "BitLocker (TPM + PIN)");
+        AddStage("BitLockerPin", "BitLocker (шифрування диска)");
         AddStage("BitLockerKeyToEntra", "Recovery-ключ в Entra ID");
         AddStage("Hibernation", "Гібернація замість сну");
         AddStage("UsbStorage", "USB-накопичувачі заборонено");
@@ -108,6 +108,8 @@ public partial class MainWindow : Window
         RunButton.IsEnabled = false;
         LapsCheck.IsEnabled = false;
         UsbCheck.IsEnabled = false;
+        BiosCheck.IsEnabled = false;
+        BitLockerPinCheck.IsEnabled = false;
         RebootButton.Visibility = Visibility.Collapsed;
         LogBox.Clear();
         foreach (var s in _stages) { s.Status = StageStatus.Pending; s.Summary = "очікує"; }
@@ -155,27 +157,35 @@ public partial class MainWindow : Window
             // ── BitLocker ──
             if (!aborted)
             {
-                var hasPin = await PowerShellRunner.RunAsync(Scripts.BitLockerHasPin, onLogLine: Log);
-                string? pin = null;
-                if (hasPin.Summary == "NOPIN")
+                bool wantPin = BitLockerPinCheck.IsChecked == true;
+                // "TPM" — сентинел для скрипту (без PIN). Якщо PIN потрібен, тут будь-яке
+                // непорожнє значення != "TPM"; реальний PIN підставляється нижче лише коли
+                // його справді бракує — інакше скрипт сам розпізнає вже існуючий TpmPin-протектор.
+                string stdin = wantPin ? "KEEP" : "TPM";
+
+                if (wantPin)
                 {
-                    var dlg = new PinDialog { Owner = this };
-                    if (dlg.ShowDialog() == true)
+                    var hasPin = await PowerShellRunner.RunAsync(Scripts.BitLockerHasPin, onLogLine: Log);
+                    if (hasPin.Summary == "NOPIN")
                     {
-                        pin = dlg.Pin;
-                    }
-                    else
-                    {
-                        SetStage("BitLockerPin", StageStatus.Fail, "FAIL - введення PIN скасовано");
-                        report["BitLockerPin"] = "FAIL - введення PIN скасовано";
-                        aborted = true;
+                        var dlg = new PinDialog { Owner = this };
+                        if (dlg.ShowDialog() == true)
+                        {
+                            stdin = dlg.Pin;
+                        }
+                        else
+                        {
+                            SetStage("BitLockerPin", StageStatus.Fail, "FAIL - введення PIN скасовано");
+                            report["BitLockerPin"] = "FAIL - введення PIN скасовано";
+                            aborted = true;
+                        }
                     }
                 }
 
                 if (!aborted)
                 {
-                    var bl = await RunStageAsync("BitLockerPin", Scripts.BitLockerEnable, pin ?? "");
-                    pin = null;
+                    var bl = await RunStageAsync("BitLockerPin", Scripts.BitLockerEnable, stdin);
+                    stdin = "";
                     report["BitLockerPin"] = bl.Summary;
                     if (bl.Status == "FAIL") aborted = true;
                 }
@@ -205,8 +215,16 @@ public partial class MainWindow : Window
                     report["UsbStorage"] = "SKIP - вимкнено оператором";
                 }
 
-                var bios = await RunStageAsync("BiosPassword", Scripts.BiosPassword);
-                report["BiosPassword"] = bios.Summary;
+                if (BiosCheck.IsChecked == true)
+                {
+                    var bios = await RunStageAsync("BiosPassword", Scripts.BiosPassword);
+                    report["BiosPassword"] = bios.Summary;
+                }
+                else
+                {
+                    SetStage("BiosPassword", StageStatus.Skip, "SKIP - вимкнено оператором");
+                    report["BiosPassword"] = "SKIP - вимкнено оператором";
+                }
 
                 if (LapsCheck.IsChecked == true)
                 {
@@ -277,16 +295,18 @@ public partial class MainWindow : Window
             RunButton.Content = "Запустити повторно";
             LapsCheck.IsEnabled = true;
             UsbCheck.IsEnabled = true;
+            BiosCheck.IsEnabled = true;
+            BitLockerPinCheck.IsEnabled = true;
         }
     }
 
     private void OnReboot(object sender, RoutedEventArgs e)
     {
         var confirm = MessageBox.Show(this,
-            "Перезавантажити зараз, щоб перевірити запит PIN при завантаженні?",
+            "Перезавантажити зараз, щоб перевірити застосовані налаштування?",
             "Перезавантаження", MessageBoxButton.YesNo, MessageBoxImage.Question);
         if (confirm == MessageBoxResult.Yes)
-            Process.Start(new ProcessStartInfo("shutdown", "/r /t 5 /c \"Перевірка BitLocker PIN\"")
+            Process.Start(new ProcessStartInfo("shutdown", "/r /t 5 /c \"Перевірка налаштувань захисту\"")
             {
                 UseShellExecute = false,
                 CreateNoWindow = true

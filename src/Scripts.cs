@@ -75,48 +75,85 @@ public static class Scripts
         Main
         """;
 
-    /// <summary>Вмикання BitLocker TPM+PIN. PIN приходить одним рядком через stdin.</summary>
+    /// <summary>
+    /// Вмикання BitLocker. Режим приходить одним рядком через stdin:
+    /// літерал "TPM" -> лише TPM-протектор (авторозблокування, без запиту при вмиканні);
+    /// будь-що інше -> це PIN, ставиться протектор TPM+PIN (питає PIN при кожному вмиканні).
+    /// </summary>
     public const string BitLockerEnable = Prolog + """
         function Main {
             $os = Get-CimInstance Win32_OperatingSystem
             if ($os.Caption -notmatch 'Pro|Enterprise|Education') {
-                Write-Output "[X] Редакція Windows '$($os.Caption)' не підтримує BitLocker з PIN (потрібна Pro/Enterprise/Education)."
+                Write-Output "[X] Редакція Windows '$($os.Caption)' не підтримує керований BitLocker (потрібна Pro/Enterprise/Education)."
                 Emit 'FAIL' "FAIL - редакція ОС без BitLocker"
                 return
             }
             Import-Module BitLocker -ErrorAction SilentlyContinue
+
+            $stdinLine = [Console]::In.ReadLine()
+            $wantsPin = -not [string]::IsNullOrEmpty($stdinLine) -and $stdinLine -ne 'TPM'
+
             $vol = Get-BitLockerVolume -MountPoint 'C:'
-            if ($vol.KeyProtector | Where-Object KeyProtectorType -eq 'TpmPin') {
-                Write-Output "[OK] BitLocker з TPM+PIN вже увімкнено (шифрування може ще тривати у фоні)."
-                Emit 'SKIP' 'SKIP - вже увімкнено'
-                return
-            }
 
-            # Enable-BitLocker -TpmAndPinProtector відмовляється працювати на недоменній машині,
-            # якщо політика 'Require additional authentication at startup' ніколи не вмикалась.
-            Write-Output "[i] Налаштовую локальні політики BitLocker (TPM + PIN)..."
-            $fve = 'HKLM:\SOFTWARE\Policies\Microsoft\FVE'
-            if (-not (Test-Path $fve)) { New-Item -Path $fve -Force | Out-Null }
-            Set-ItemProperty -Path $fve -Name 'UseAdvancedStartup' -Value 1 -Type DWord
-            Set-ItemProperty -Path $fve -Name 'UseTPM'    -Value 2 -Type DWord
-            Set-ItemProperty -Path $fve -Name 'UseTPMPIN' -Value 2 -Type DWord
-            gpupdate /force | Out-Null
+            if ($wantsPin) {
+                if ($vol.KeyProtector | Where-Object KeyProtectorType -eq 'TpmPin') {
+                    Write-Output "[OK] BitLocker з TPM+PIN вже увімкнено (шифрування може ще тривати у фоні)."
+                    Emit 'SKIP' 'SKIP - вже увімкнено'
+                    return
+                }
 
-            $pin = [Console]::In.ReadLine()
-            if ([string]::IsNullOrWhiteSpace($pin)) {
-                Emit 'FAIL' 'FAIL - PIN не передано'
-                return
-            }
-            $securePin = ConvertTo-SecureString -String $pin -AsPlainText -Force
-            Remove-Variable pin
+                # Enable-BitLocker -TpmAndPinProtector відмовляється працювати на недоменній машині,
+                # якщо політика 'Require additional authentication at startup' ніколи не вмикалась.
+                Write-Output "[i] Налаштовую локальні політики BitLocker (TPM + PIN)..."
+                $fve = 'HKLM:\SOFTWARE\Policies\Microsoft\FVE'
+                if (-not (Test-Path $fve)) { New-Item -Path $fve -Force | Out-Null }
+                Set-ItemProperty -Path $fve -Name 'UseAdvancedStartup' -Value 1 -Type DWord
+                Set-ItemProperty -Path $fve -Name 'UseTPM'    -Value 2 -Type DWord
+                Set-ItemProperty -Path $fve -Name 'UseTPMPIN' -Value 2 -Type DWord
+                gpupdate /force | Out-Null
 
-            try {
-                Enable-BitLocker -MountPoint 'C:' -TpmAndPinProtector -Pin $securePin -SkipHardwareTest -ErrorAction Stop | Out-Null
-                Write-Output "[OK] BitLocker з TPM+PIN увімкнено. Шифрування триватиме у фоні."
-                Emit 'OK' 'OK'
-            } catch {
-                Write-Output "[X] Помилка ввімкнення BitLocker: $($_.Exception.Message)"
-                Emit 'FAIL' ("FAIL: " + $_.Exception.Message)
+                $securePin = ConvertTo-SecureString -String $stdinLine -AsPlainText -Force
+                Remove-Variable stdinLine
+
+                try {
+                    # Якщо раніше стояв протектор лише TPM (без PIN) - прибираємо його, інакше лишаться два протектори.
+                    $oldTpm = $vol.KeyProtector | Where-Object KeyProtectorType -eq 'Tpm'
+                    foreach ($p in $oldTpm) { Remove-BitLockerKeyProtector -MountPoint 'C:' -KeyProtectorId $p.KeyProtectorId -ErrorAction SilentlyContinue | Out-Null }
+
+                    if ($vol.VolumeStatus -eq 'FullyDecrypted') {
+                        Enable-BitLocker -MountPoint 'C:' -TpmAndPinProtector -Pin $securePin -SkipHardwareTest -ErrorAction Stop | Out-Null
+                    } else {
+                        Add-BitLockerKeyProtector -MountPoint 'C:' -TpmAndPinProtector -Pin $securePin -ErrorAction Stop | Out-Null
+                    }
+                    Write-Output "[OK] BitLocker з TPM+PIN увімкнено. Шифрування триватиме у фоні."
+                    Emit 'OK' 'OK'
+                } catch {
+                    Write-Output "[X] Помилка ввімкнення BitLocker: $($_.Exception.Message)"
+                    Emit 'FAIL' ("FAIL: " + $_.Exception.Message)
+                }
+            } else {
+                if ($vol.KeyProtector | Where-Object KeyProtectorType -eq 'Tpm') {
+                    Write-Output "[OK] BitLocker з TPM (без PIN) вже увімкнено — запиту при вмиканні немає."
+                    Emit 'SKIP' 'SKIP - вже увімкнено'
+                    return
+                }
+
+                try {
+                    # Прибираємо TPM+PIN-протектор, якщо він був - інакше PIN і далі питатиметься при вмиканні.
+                    $oldPin = $vol.KeyProtector | Where-Object KeyProtectorType -eq 'TpmPin'
+                    foreach ($p in $oldPin) { Remove-BitLockerKeyProtector -MountPoint 'C:' -KeyProtectorId $p.KeyProtectorId -ErrorAction SilentlyContinue | Out-Null }
+
+                    if ($vol.VolumeStatus -eq 'FullyDecrypted') {
+                        Enable-BitLocker -MountPoint 'C:' -TpmProtector -SkipHardwareTest -ErrorAction Stop | Out-Null
+                    } else {
+                        Add-BitLockerKeyProtector -MountPoint 'C:' -TpmProtector -ErrorAction Stop | Out-Null
+                    }
+                    Write-Output "[OK] BitLocker з TPM (без PIN) увімкнено. Диск зашифрований, розблоковується автоматично - без запиту при вмиканні."
+                    Emit 'OK' 'OK'
+                } catch {
+                    Write-Output "[X] Помилка ввімкнення BitLocker: $($_.Exception.Message)"
+                    Emit 'FAIL' ("FAIL: " + $_.Exception.Message)
+                }
             }
         }
         Main
