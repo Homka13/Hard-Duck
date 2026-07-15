@@ -470,8 +470,14 @@ public static class Scripts
                     Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' } |
                     Select-Object -First 1
                 if ($kp) {
-                    Write-Output "[OK] BitLocker recovery-ключ отримано."
-                    Emit 'OK' $kp.RecoveryPassword
+                    $details = $kp | Get-BitLockerKeyProtector -ErrorAction Stop
+                    if ($details -and $details.RecoveryPassword) {
+                        Write-Output "[OK] BitLocker recovery-ключ отримано."
+                        Emit 'OK' $details.RecoveryPassword
+                    } else {
+                        Write-Output "[!] RecoveryPassword протектор знайдено, але ключ порожній."
+                        Emit 'SKIP' ''
+                    }
                 } else {
                     Write-Output "[!] RecoveryPassword-протектор відсутній на C:."
                     Emit 'SKIP' ''

@@ -63,6 +63,12 @@ public static class PowerShellRunner
         proc.ErrorDataReceived += (_, e) =>
         {
             if (string.IsNullOrWhiteSpace(e.Data)) return;
+            // Пропускаємо CLIXML-шум та прогрес-повідомлення про завантаження модулів
+            var line = e.Data.TrimStart();
+            if (line.StartsWith("#<") && line.EndsWith(">")) return;
+            if (line.StartsWith('<') && line.EndsWith('>')) return; // CLIXML (XML elements)
+            if (line.Contains("Preparing modules for first use")) return;
+
             log.AppendLine("[stderr] " + e.Data);
             onLogLine?.Invoke("[stderr] " + e.Data);
         };
