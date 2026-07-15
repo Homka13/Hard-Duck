@@ -24,9 +24,8 @@ $ProgressPreference    = 'SilentlyContinue'
 
 # ----------------------------------------------------------------
 # Конфігурація — Infisical Cloud (V3 API)
+# Токен: змінна середовища $env:INFISICAL_TOKEN
 # ----------------------------------------------------------------
-$InfisicalWorkspaceId = '7f47fee3-7122-4bd5-bbf6-b26c72e1559c'
-$InfisicalToken       = 'st.b23fd0af-ba6d-4888-8e18-2f31ac73a82e.2d2e6efd178056704215dfb47aaee5d6.5780902e694adb8d37ab433ccfb410b1'
 
 # ----------------------------------------------------------------
 # Допоміжна функція: генерація криптостійкого пароля
@@ -153,13 +152,13 @@ try {
 }
 
 # ----------------------------------------------------------------
-# 5. BitLocker — три незалежні фази:
+# 5. BitLocker — дві незалежні фази (налаштування):
 #    5a. Увімкнення (якщо розшифровано) або SKIP.
 #    5b. Забезпечення наявності RecoveryPassword протектора.
-#    5c. ОТРИМАННЯ КЛЮЧА — власний try/catch, виконується ЗАВЖДИ,
-#        навіть якщо 5a або 5b впали з помилкою.
+#    5c. Спроба читання ключа (для діагностики).
+#    Основний видобуток ключа та завантаження в Infisical —
+#    у секції 6, яка виконується ЗАВЖДИ.
 # ----------------------------------------------------------------
-$RecoveryKey = $null
 
 # ── 5a+5b: увімкнення + протектор (спільний try/catch, нефатальний) ──
 try {
@@ -213,142 +212,74 @@ catch {
     Write-Warning "Помилка ініціалізації BitLocker: $_"
 }
 
-# ── 5c: ОТРИМАННЯ КЛЮЧА (власний try/catch, виконується ЗАВЖДИ) ──
+# ── 5c: спроба отримання ключа (власний try/catch, нефатальний) ──
 try {
     $blVolume = Get-BitLockerVolume -MountPoint 'C:' -ErrorAction SilentlyContinue
     if ($blVolume) {
-        $RecoveryKey = ($blVolume.KeyProtector |
+        $protectorDetails = ($blVolume.KeyProtector |
             Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' } |
             Select-Object -First 1 |
-            Get-BitLockerKeyProtector -ErrorAction SilentlyContinue).RecoveryPassword
-
-        if ($RecoveryKey) {
+            Get-BitLockerKeyProtector -ErrorAction SilentlyContinue)
+        if ($protectorDetails -and $protectorDetails.RecoveryPassword) {
             Write-Host 'Ключ відновлення BitLocker успішно отримано.'
         }
     }
 }
 catch {
-    Write-Warning "Не вдалося отримати ключ BitLocker: $_"
-}
-
-# ── 5d: валідація (CRITICAL попередження, але скрипт продовжує) ──
-if (-not $RecoveryKey) {
-    Write-Warning 'CRITICAL: BitLocker recovery key could not be retrieved.'
-    Write-Warning 'Секрет буде відправлено в Infisical з BitLockerKey = N/A.'
-    $RecoveryKey = 'N/A'
+    Write-Warning "Не вдалося отримати ключ BitLocker на етапі 5: $_"
 }
 
 # ----------------------------------------------------------------
-# 6. Формування секрету (дані пристрою у JSON)
-#    Структура: Metadata (ідентифікація) + Secrets (пароль, ключ)
+# 6. Інтеграція з Infisical Cloud
+#    Видобуває ключ відновлення BitLocker і надсилає його
+#    у Infisical Cloud через V3 API. Виконується ЗАВЖДИ,
+#    незалежно від того, чи BitLocker щойно увімкнено, чи він
+#    уже працював раніше.
 # ----------------------------------------------------------------
-$deviceData = [PSCustomObject]@{
-    Metadata = [PSCustomObject]@{
-        ComputerName  = $ComputerName
-        SerialNumber  = $SerialNumber
-        LoggedUser    = $CurrentUser
-        Timestamp     = (Get-Date -Format 'o')
+
+# Прив'язка контексту користувача для імені секрету
+$DailyUser = $CurrentUser
+
+# Видобування ключа відновлення BitLocker
+Write-Host "[INFO] Reading BitLocker Recovery Key..." -ForegroundColor Cyan
+$RecoveryKey = (Get-BitLockerVolume -MountPoint $env:SystemDrive).KeyProtector |
+    Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' } |
+    Select-Object -ExpandProperty RecoveryPassword
+
+if ([string]::IsNullOrWhiteSpace($RecoveryKey)) {
+    Write-Host "[WARNING] BitLocker Recovery Key is empty. Drive might not be fully encrypted yet." -ForegroundColor Yellow
+}
+else {
+    # Визначення контексту користувача для імені секрету
+    $TargetUser = if ([string]::IsNullOrWhiteSpace($DailyUser)) { "local" } else { $DailyUser }
+    $SecretName = "BITLOCKER_$($env:COMPUTERNAME)_$TargetUser"
+
+    # Конфігурація Infisical V3 API
+    $Uri = "https://app.infisical.com/api/v3/secrets/raw/$SecretName"
+    $Headers = @{
+        "Authorization" = "Bearer $env:INFISICAL_TOKEN"
+        "Content-Type"  = "application/json"
     }
-    Secrets = [PSCustomObject]@{
-        AdminPass    = $AdminPassword
-        BitLockerKey = $RecoveryKey
-    }
-} | ConvertTo-Json -Compress -Depth 4
 
-# Пакування у формат Infisical raw-secret: name = DEVICE_<Serial>, value = JSON пристрою
-$secretName = "DEVICE_$ComputerName"
+    $Payload = @{
+        workspaceId = "7f47fee3-7122-4bd5-bbf6-b26c72e1559c"
+        environment = "dev"
+        secretPath  = "/"
+        type        = "shared"
+        secretName  = $SecretName
+        secretValue = $RecoveryKey
+    } | ConvertTo-Json
 
-# ----------------------------------------------------------------
-# 7. POST до Infisical Cloud API (V3)
-#    Нефатальний: помилка логується, але скрипт продовжує роботу.
-# ----------------------------------------------------------------
-$ReportStatus = 'SUCCESS'
-$ReportError  = ''
-
-# Тіло запиту V3: параметри передаються в JSON-тілі, не в URL
-$v3Payload = @{
-    workspaceId = $InfisicalWorkspaceId
-    environment = 'dev'
-    secretPath  = '/'
-    type        = 'shared'
-    secretName  = $secretName
-    secretValue = $deviceData
-} | ConvertTo-Json
-
-$v3Uri     = "https://app.infisical.com/api/v3/secrets/raw/$secretName"
-$v3Headers = @{
-    'Authorization' = "Bearer $InfisicalToken"
-    'Content-Type'  = 'application/json'
-}
-
-Write-Host "Зберігаю секрет '$secretName' у Infisical Cloud (V3)..."
-
-try {
-    $response = Invoke-RestMethod -Uri $v3Uri `
-        -Method Post `
-        -Headers $v3Headers `
-        -Body $v3Payload `
-        -ContentType 'application/json; charset=utf-8' `
-        -ErrorAction Stop
-    Write-Host "Infisical POST успішно: $($response | ConvertTo-Json -Compress)"
-} catch {
-    Write-Warning "Помилка виклику Infisical API: $_"
-    $ReportStatus = 'ERROR'
-    $ReportError  = $_.Exception.Message
-}
-
-# ----------------------------------------------------------------
-# 8. Обов'язкова фаза звітування (виконується ЗАВЖДИ)
-#    Останній шанс отримати BitLocker-ключ, якщо секція 5 не змогла,
-#    та логування результату в harden-status.csv незалежно від
-#    результату POST-запиту.
-# ----------------------------------------------------------------
-
-# ── Фінальна спроба отримати ключ (якщо досі N/A) ──
-if ($RecoveryKey -eq 'N/A') {
+    # Надсилання до Infisical
+    Write-Host "[INFO] Pushing secret '$SecretName' to Infisical..." -ForegroundColor Cyan
     try {
-        Import-Module BitLocker -ErrorAction SilentlyContinue | Out-Null
-        $vol = Get-BitLockerVolume -MountPoint 'C:' -ErrorAction SilentlyContinue
-        if ($vol) {
-            $prot = $vol.KeyProtector |
-                Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' } |
-                Select-Object -First 1
-            if ($prot) {
-                $details = $prot | Get-BitLockerKeyProtector -ErrorAction SilentlyContinue
-                if ($details -and $details.RecoveryPassword) {
-                    $RecoveryKey = $details.RecoveryPassword
-                    Write-Host 'Фаза звітування: ключ BitLocker успішно отримано повторно.'
-                }
-            }
-        }
-    } catch { }
-}
-
-# ── Формування рядка статусу ──
-$timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
-if ($ReportStatus -eq 'SUCCESS') {
-    $csvLine = "SUCCESS: Data reported for $ComputerName at $timestamp"
-} else {
-    $truncatedError = ($ReportError -replace '[,\r\n]', ' ') -replace '\s+', ' '
-    if ($truncatedError.Length -gt 200) { $truncatedError = $truncatedError.Substring(0, 200) + '...' }
-    $csvLine = "ERROR: Report failed - $truncatedError"
-}
-
-# ── Запис у harden-status.csv ──
-try {
-    $csvDir  = 'C:\ProgramData\ITSecurity'
-    $csvPath = Join-Path $csvDir 'harden-status.csv'
-    if (-not (Test-Path $csvDir)) {
-        $null = New-Item -ItemType Directory -Path $csvDir -Force -ErrorAction Stop
+        Invoke-RestMethod -Uri $Uri -Method Post -Headers $Headers -Body $Payload `
+            -ContentType "application/json" -ErrorAction Stop
+        Write-Host "[OK] Successfully saved BitLocker key to the vault." -ForegroundColor Green
     }
-    # Дописуємо рядок; якщо файл новий — спершу пишемо заголовок
-    if (-not (Test-Path $csvPath)) {
-        "Status,Message" | Out-File -FilePath $csvPath -Encoding UTF8
+    catch {
+        Write-Host "[ERROR] Failed to push to Infisical: $_" -ForegroundColor Red
     }
-    $csvLine | Out-File -FilePath $csvPath -Encoding UTF8 -Append
-    Write-Host "Статус записано у $csvPath"
-} catch {
-    Write-Warning "Не вдалося записати статус у CSV: $_"
 }
 
 Write-Host 'nosuha.ps1 успішно завершено.'
