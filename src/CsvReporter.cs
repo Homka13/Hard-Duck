@@ -15,9 +15,10 @@ public static class CsvReporter
 
     private static readonly string[] Columns =
     {
-        "Computer", "Timestamp", "SecureBoot", "TPM", "EntraJoin",
-        "BitLockerPin", "BitLockerKeyToEntra", "Hibernation",
-        "UsbStorage", "BiosPassword", "LAPS", "AdminRemoved"
+        "Computer", "Timestamp", "SecureBoot", "TPM",
+        "BitLockerPin", "Hibernation",
+        "UsbStorage", "BiosPassword", "LAPS",
+        "NosuhaAdmin", "NosuhaWebhook", "AdminRemoved"
     };
 
     public static string Append(IReadOnlyDictionary<string, string> values)

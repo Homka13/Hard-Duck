@@ -33,6 +33,9 @@
 
         <!-- Опції -->
         <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,10">
+            <CheckBox x:Name="SecureBootCheck" Content="Перевіряти Secure Boot" IsChecked="True"
+                      Foreground="#E8EAF0" VerticalAlignment="Center" Margin="0,0,20,0"
+                      ToolTip="Перевіряє, чи ввімкнено Secure Boot в UEFI. Якщо вимкнено — безпечно пропустити, але рекомендовано ввімкнути перед шифруванням BitLocker."/>
             <CheckBox x:Name="UsbCheck" Content="Заборонити USB-накопичувачі" IsChecked="True"
                       Foreground="#E8EAF0" VerticalAlignment="Center" Margin="0,0,20,0"
                       ToolTip="Флешки, зовнішні диски, SD-картки, телефони як накопичувач. Клавіатури, миші, принтери, гарнітури працюватимуть."/>

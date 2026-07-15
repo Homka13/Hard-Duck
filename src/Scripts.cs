@@ -48,22 +48,6 @@ public static class Scripts
         Main
         """;
 
-    public const string EntraJoin = Prolog + """
-        function Main {
-            $status = dsregcmd /status
-            if ($status -match 'AzureAdJoined\s*:\s*YES') {
-                Write-Output "[OK] Пристрій приєднано до Entra ID (повний join)."
-                Emit 'OK' 'OK'
-            } else {
-                Write-Output "[X] Пристрій НЕ приєднано до Entra ID."
-                Write-Output "[i] Потрібен саме повний join (не 'робочий акаунт'): Параметри -> Облікові записи -> Access work or school ->"
-                Write-Output "[i] Connect -> 'Join this device to Microsoft Entra ID'. Після приєднання запустіть програму знову."
-                Emit 'FAIL' 'FAIL - не приєднано до Entra ID'
-            }
-        }
-        Main
-        """;
-
     /// <summary>Швидка перевірка: чи вже є протектор TPM+PIN (щоб не питати PIN даремно).</summary>
     public const string BitLockerHasPin = Prolog + """
         function Main {
@@ -154,30 +138,6 @@ public static class Scripts
                     Write-Output "[X] Помилка ввімкнення BitLocker: $($_.Exception.Message)"
                     Emit 'FAIL' ("FAIL: " + $_.Exception.Message)
                 }
-            }
-        }
-        Main
-        """;
-
-    public const string RecoveryKeyToEntra = Prolog + """
-        function Main {
-            Import-Module BitLocker -ErrorAction SilentlyContinue
-            $vol = Get-BitLockerVolume -MountPoint 'C:'
-            $rp = $vol.KeyProtector | Where-Object KeyProtectorType -eq 'RecoveryPassword' | Select-Object -First 1
-            if (-not $rp) {
-                Write-Output "[i] Recovery-протектора ще немає — додаю."
-                Add-BitLockerKeyProtector -MountPoint 'C:' -RecoveryPasswordProtector | Out-Null
-                $vol = Get-BitLockerVolume -MountPoint 'C:'
-                $rp = $vol.KeyProtector | Where-Object KeyProtectorType -eq 'RecoveryPassword' | Select-Object -First 1
-            }
-            try {
-                BackupToAAD-BitLockerKeyProtector -MountPoint 'C:' -KeyProtectorId $rp.KeyProtectorId -ErrorAction Stop | Out-Null
-                Write-Output "[OK] Recovery-ключ забекаплено в Entra ID."
-                Emit 'OK' 'OK'
-            } catch {
-                Write-Output "[X] Не вдалось забекапити ключ в Entra ID: $($_.Exception.Message)"
-                Write-Output "[!] Машина лишається зашифрованою, але ключ треба задокументувати вручну (KeePass-vault)."
-                Emit 'FAIL' ("FAIL: " + $_.Exception.Message)
             }
         }
         Main

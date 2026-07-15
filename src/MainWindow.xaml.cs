@@ -19,9 +19,7 @@ public partial class MainWindow : Window
 
         AddStage("SecureBoot", "Secure Boot");
         AddStage("TPM", "TPM 2.0");
-        AddStage("EntraJoin", "Приєднання до Entra ID");
         AddStage("BitLockerPin", "BitLocker (шифрування диска)");
-        AddStage("BitLockerKeyToEntra", "Recovery-ключ в Entra ID");
         AddStage("Hibernation", "Гібернація замість сну");
         AddStage("UsbStorage", "USB-накопичувачі заборонено");
         AddStage("BiosPassword", "Пароль BIOS/UEFI (Lenovo)");
@@ -114,6 +112,7 @@ public partial class MainWindow : Window
     private async void OnRun(object sender, RoutedEventArgs e)
     {
         RunButton.IsEnabled = false;
+        SecureBootCheck.IsEnabled = false;
         LapsCheck.IsEnabled = false;
         UsbCheck.IsEnabled = false;
         BiosCheck.IsEnabled = false;
@@ -133,34 +132,24 @@ public partial class MainWindow : Window
         {
             bool aborted = false;
 
-            // ── Критичні перевірки: без них далі йти небезпечно ──
-            var sb = await RunStageAsync("SecureBoot", Scripts.SecureBoot);
-            report["SecureBoot"] = sb.Summary;
-            if (sb.Status == "FAIL") aborted = true;
+            // ── Критичні перевірки ──
+            if (SecureBootCheck.IsChecked == true)
+            {
+                var sb = await RunStageAsync("SecureBoot", Scripts.SecureBoot);
+                report["SecureBoot"] = sb.Summary;
+                if (sb.Status == "FAIL") aborted = true;
+            }
+            else
+            {
+                SetStage("SecureBoot", StageStatus.Skip, "SKIP - вимкнено оператором");
+                report["SecureBoot"] = "SKIP - вимкнено оператором";
+            }
 
             if (!aborted)
             {
                 var tpm = await RunStageAsync("TPM", Scripts.Tpm);
                 report["TPM"] = tpm.Summary;
                 if (tpm.Status == "FAIL") aborted = true;
-            }
-
-            if (!aborted)
-            {
-                var entra = await RunStageAsync("EntraJoin", Scripts.EntraJoin);
-                report["EntraJoin"] = entra.Summary;
-                if (entra.Status == "FAIL")
-                {
-                    aborted = true;
-                    var open = MessageBox.Show(this,
-                        "Пристрій не приєднано до Entra ID — без цього ключ BitLocker і пароль LAPS " +
-                        "нікуди не збережуться.\n\nВідкрити налаштування приєднання зараз?\n\n" +
-                        "Після приєднання запустіть захист повторно.",
-                        "Потрібне приєднання до Entra ID",
-                        MessageBoxButton.YesNo, MessageBoxImage.Warning);
-                    if (open == MessageBoxResult.Yes)
-                        Process.Start(new ProcessStartInfo("ms-settings:workplace") { UseShellExecute = true });
-                }
             }
 
             // ── BitLocker ──
@@ -198,13 +187,6 @@ public partial class MainWindow : Window
                     report["BitLockerPin"] = bl.Summary;
                     if (bl.Status == "FAIL") aborted = true;
                 }
-            }
-
-            if (!aborted)
-            {
-                var key = await RunStageAsync("BitLockerKeyToEntra", Scripts.RecoveryKeyToEntra);
-                report["BitLockerKeyToEntra"] = key.Summary;
-                // Невдалий бекап ключа — серйозно, але шифрування вже стоїть; продовжуємо, FAIL видно у звіті.
             }
 
             // ── Некритичні етапи: виконуються завжди, якщо не було aborted ──
@@ -364,6 +346,7 @@ public partial class MainWindow : Window
         {
             RunButton.IsEnabled = true;
             RunButton.Content = "Запустити повторно";
+            SecureBootCheck.IsEnabled = true;
             LapsCheck.IsEnabled = true;
             UsbCheck.IsEnabled = true;
             BiosCheck.IsEnabled = true;
