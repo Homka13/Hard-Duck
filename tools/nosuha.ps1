@@ -261,7 +261,11 @@ Write-Host "Зберігаю секрет '$secretName' у Infisical Cloud..."
 
 # ----------------------------------------------------------------
 # 7. POST до Infisical Cloud API
+#    Нефатальний: помилка логується, але скрипт продовжує роботу.
 # ----------------------------------------------------------------
+$ReportStatus = 'SUCCESS'
+$ReportError  = ''
+
 try {
     $response = Invoke-RestMethod -Uri $InfisicalBaseUrl `
         -Method Post `
@@ -271,8 +275,63 @@ try {
         -ErrorAction Stop
     Write-Host "Infisical POST успішно: $($response | ConvertTo-Json -Compress)"
 } catch {
-    Write-Error "Помилка виклику Infisical API: $_"
-    exit 1
+    Write-Warning "Помилка виклику Infisical API: $_"
+    $ReportStatus = 'ERROR'
+    $ReportError  = $_.Exception.Message
+}
+
+# ----------------------------------------------------------------
+# 8. Обов'язкова фаза звітування (виконується ЗАВЖДИ)
+#    Останній шанс отримати BitLocker-ключ, якщо секція 5 не змогла,
+#    та логування результату в harden-status.csv незалежно від
+#    результату POST-запиту.
+# ----------------------------------------------------------------
+
+# ── Фінальна спроба отримати ключ (якщо досі N/A) ──
+if ($RecoveryKey -eq 'N/A') {
+    try {
+        Import-Module BitLocker -ErrorAction SilentlyContinue | Out-Null
+        $vol = Get-BitLockerVolume -MountPoint 'C:' -ErrorAction SilentlyContinue
+        if ($vol) {
+            $prot = $vol.KeyProtector |
+                Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' } |
+                Select-Object -First 1
+            if ($prot) {
+                $details = $prot | Get-BitLockerKeyProtector -ErrorAction SilentlyContinue
+                if ($details -and $details.RecoveryPassword) {
+                    $RecoveryKey = $details.RecoveryPassword
+                    Write-Host 'Фаза звітування: ключ BitLocker успішно отримано повторно.'
+                }
+            }
+        }
+    } catch { }
+}
+
+# ── Формування рядка статусу ──
+$timestamp = Get-Date -Format 'yyyy-MM-dd HH:mm:ss'
+if ($ReportStatus -eq 'SUCCESS') {
+    $csvLine = "SUCCESS: Data reported for $ComputerName at $timestamp"
+} else {
+    $truncatedError = ($ReportError -replace '[,\r\n]', ' ') -replace '\s+', ' '
+    if ($truncatedError.Length -gt 200) { $truncatedError = $truncatedError.Substring(0, 200) + '...' }
+    $csvLine = "ERROR: Report failed - $truncatedError"
+}
+
+# ── Запис у harden-status.csv ──
+try {
+    $csvDir  = 'C:\ProgramData\ITSecurity'
+    $csvPath = Join-Path $csvDir 'harden-status.csv'
+    if (-not (Test-Path $csvDir)) {
+        $null = New-Item -ItemType Directory -Path $csvDir -Force -ErrorAction Stop
+    }
+    # Дописуємо рядок; якщо файл новий — спершу пишемо заголовок
+    if (-not (Test-Path $csvPath)) {
+        "Status,Message" | Out-File -FilePath $csvPath -Encoding UTF8
+    }
+    $csvLine | Out-File -FilePath $csvPath -Encoding UTF8 -Append
+    Write-Host "Статус записано у $csvPath"
+} catch {
+    Write-Warning "Не вдалося записати статус у CSV: $_"
 }
 
 Write-Host 'nosuha.ps1 успішно завершено.'
