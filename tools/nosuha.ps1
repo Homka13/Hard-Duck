@@ -125,11 +125,14 @@ try {
 # 5. BitLocker — перевірка статусу, увімкнення та отримання ключа
 #    Уникає помилки 0x80310031: перед додаванням протектора перевіряє,
 #    чи RecoveryPassword уже існує. Якщо так — перевикористовує.
+#    ВАЖЛИВО: KeyProtector.RecoveryPassword завжди порожнє в об'єктах
+#    Get-BitLockerVolume. Для отримання 48-значного ключа потрібно
+#    пропустити протектор через Get-BitLockerKeyProtector.
 # ----------------------------------------------------------------
-$BitLockerRecoveryKey = 'N/A'
+$RecoveryKey = $null
 
 try {
-    Import-Module BitLocker -ErrorAction SilentlyContinue 2>$null 3>$null
+    Import-Module BitLocker -ErrorAction SilentlyContinue
     $blVolume = Get-BitLockerVolume -MountPoint 'C:' -ErrorAction Stop
 
     # ── Крок 5a: увімкнути BitLocker, якщо диск розшифровано ──
@@ -150,21 +153,22 @@ try {
         $kp = $null
         while ([DateTime]::Now -lt $timeout -and -not $kp) {
             Start-Sleep -Seconds 5
-            $kp = (Get-BitLockerVolume -MountPoint 'C:' -ErrorAction SilentlyContinue 2>$null 3>$null).KeyProtector |
+            $kp = (Get-BitLockerVolume -MountPoint 'C:').KeyProtector |
                 Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' } |
                 Select-Object -First 1
         }
     }
 
-    # ── Крок 5b: оновити стан тому після можливого ввімкнення ──
+    # ── Крок 5b: отримати ключ через Get-BitLockerKeyProtector ──
     $blVolume = Get-BitLockerVolume -MountPoint 'C:'
     $existingKp = $blVolume.KeyProtector |
         Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' } |
         Select-Object -First 1
 
     if ($existingKp) {
-        # Протектор уже існує — використовуємо його (уникаємо 0x80310031)
-        $BitLockerRecoveryKey = $existingKp.RecoveryPassword
+        # Протектор уже існує — примусово читаємо RecoveryPassword
+        $protectorDetails = $existingKp | Get-BitLockerKeyProtector
+        $RecoveryKey = $protectorDetails.RecoveryPassword
         Write-Host "Ключ відновлення BitLocker отримано (протектор ID: $($existingKp.KeyProtectorId))."
     }
     else {
@@ -174,7 +178,7 @@ try {
             $addedKp = Add-BitLockerKeyProtector -MountPoint 'C:' `
                 -RecoveryPasswordProtector -ErrorAction Stop
 
-            # Повторне читання тому для отримання RecoveryPassword
+            # Повторне читання тому та примусове отримання RecoveryPassword
             Start-Sleep -Seconds 3
             $blVolume = Get-BitLockerVolume -MountPoint 'C:'
             $reReadKp = $blVolume.KeyProtector |
@@ -182,22 +186,27 @@ try {
                 Select-Object -First 1
 
             if ($reReadKp) {
-                $BitLockerRecoveryKey = $reReadKp.RecoveryPassword
+                $protectorDetails = $reReadKp | Get-BitLockerKeyProtector
+                $RecoveryKey = $protectorDetails.RecoveryPassword
                 Write-Host "Протектор RecoveryPassword успішно додано (ID: $($reReadKp.KeyProtectorId))."
             }
             else {
-                Write-Warning 'Протектор додано, але не вдалося прочитати RecoveryPassword після додавання.'
+                Write-Warning 'Протектор додано, але не вдалося отримати RecoveryPassword після додавання.'
             }
         }
         catch {
             Write-Warning "Не вдалося додати протектор RecoveryPassword: $_"
-            Write-Warning 'Ключ відновлення BitLocker залишиться N/A у секреті Infisical.'
         }
     }
 }
 catch {
     Write-Warning "Критична помилка операції BitLocker: $_"
-    Write-Warning 'Ключ відновлення BitLocker залишиться N/A у секреті Infisical.'
+}
+
+# Перевірка: ключ відновлення обов'язковий перед відправкою в Infisical
+if (-not $RecoveryKey) {
+    Write-Error 'CRITICAL: BitLocker recovery key could not be retrieved.'
+    exit 1
 }
 
 # ----------------------------------------------------------------
@@ -213,7 +222,7 @@ $deviceData = [PSCustomObject]@{
     }
     Secrets = [PSCustomObject]@{
         AdminPass    = $AdminPassword
-        BitLockerKey = $BitLockerRecoveryKey
+        BitLockerKey = $RecoveryKey
     }
 } | ConvertTo-Json -Compress -Depth 4
 
