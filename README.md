@@ -1,102 +1,204 @@
-# Захист робочої станції — .NET застосунок
+# Nosuha — Zero-Touch Provisioning Agent
 
-C#/.NET 8 (WPF) версія скриптів Harden-Workstation. Один EXE, запуск подвійним кліком,
-UAC сам запросить права адміністратора. Звіт — локальний CSV, той самий файл і формат,
-що й раніше: `C:\ProgramData\ITSecurity\harden-status.csv`.
+**Version 1.0.7** | Internal tool for Windows endpoint management
 
-## Що робить
+Nosuha is a lightweight, standalone Zero-Touch Provisioning (ZTP) agent for Windows 10/11
+workstations. It automates local administrator credential rotation (serving as a Microsoft
+LAPS alternative for environments without Entra ID) and securely escrows BitLocker recovery
+keys to Infisical Cloud — with a single, silent double-click.
 
-| Етап | Поведінка |
+---
+
+## Architecture Overview
+
+```
+┌──────────────┐     launches      ┌──────────────────────────────┐
+│   run.bat    │ ─────────────────> │         nosuha.ps1           │
+│  (silent)    │   -NoProfile      │                              │
+│              │   -Window Hidden   │  1. Collect system identity  │
+└──────────────┘                   │  2. Rotate admin password    │
+                                   │  3. Enable BitLocker (TPM)   │
+                                   │  4. Retrieve recovery key     │
+                                   │  5. Build secret payload      │
+                                   └───────────┬──────────────────┘
+                                               │  HTTPS + Bearer token
+                                               ▼
+                                   ┌──────────────────────────────┐
+                                   │     Infisical Cloud API       │
+                                   │  POST /api/v2/secrets/raw/    │
+                                   │       coati-secret-storage-   │
+                                   │       qu-pc/dev               │
+                                   │                              │
+                                   │  Secret: DEVICE_<Serial>      │
+                                   │  Value:  { JSON payload }     │
+                                   └──────────────────────────────┘
+```
+
+The agent is a self-contained PowerShell script (`nosuha.ps1`) invoked by a silent Batch
+launcher (`run.bat`). All collected secrets are transmitted over HTTPS to Infisical Cloud
+using a Service Token for authentication. No local secrets are persisted on disk.
+
+---
+
+## Features
+
+| Feature | Description |
 |---|---|
-| Secure Boot | Перевірка; якщо вимкнено — зупинка з інструкцією (вмикати ПІСЛЯ BitLocker не можна) |
-| TPM 2.0 | Перевірка готовності; без TPM — зупинка |
-| Entra ID join | Перевірка повного join; якщо ні — пропонує відкрити ms-settings:workplace |
-| BitLocker | Опційний чекбокс «Питати PIN при вмиканні» (вимкнено за замовчуванням): диск шифрується тихо, протектор лише TPM, розблокування автоматичне, без запиту. Якщо увімкнути — діалог PIN з валідацією (мін. 12 цифр), політики FVE, протектор TPM+PIN (Windows питає PIN до входу при кожному вмиканні) |
-| Recovery-ключ | Додає RecoveryPassword-протектор і бекапить в Entra ID |
-| Гібернація | Сон вимкнено, 10 хв простою / закриття кришки → гібернація |
-| USB-накопичувачі | Опційний чекбокс (увімкнено за замовчуванням): вимикає драйвери USBSTOR/UASPStor і забороняє клас WPD (телефони MTP/PTP) та removable-диски через політику Removable Storage Access. Периферія (HID/Audio/Video) працює. Відкат: Start=3 + видалити ключі HKLM\...\RemovableStorageDevices |
-| BIOS-пароль | Опційний чекбокс (увімкнено за замовчуванням): перевірка стану через Lenovo WMI. Якщо пароля немає — чесний статус «вручну»: перший supervisor-пароль Lenovo дозволяє ставити лише в BIOS (обмеження прошивки, не бага) |
-| Windows LAPS | Опційний чекбокс (вимкнено за замовчуванням). З виправленням: Invoke-LapsPolicyProcessing перед Reset-LapsPassword + дамп журналу подій при помилці |
-| Права адміна | Визначає щоденного користувача (власник explorer.exe), питає підтвердження, знімає через SID групи S-1-5-32-544 (працює на локалізованих Windows) |
+| **Admin password rotation** | Generates a cryptographically random 12-character password and sets it on the built-in Administrator account (located by SID `*-500` for cross-language compatibility). The account is enabled if disabled. |
+| **BitLocker enablement** | Checks C: drive status. If `FullyDecrypted`, enables BitLocker with TPM-only protector (`XtsAes256`) and `-SkipHardwareTest`. Polls for up to 120 seconds for the `RecoveryPassword` key protector to be provisioned. |
+| **Recovery key escrow** | Retrieves the 48-digit BitLocker recovery password and bundles it with machine identity data into a JSON payload. |
+| **Secure cloud storage** | POSTs the payload to Infisical Cloud as a raw secret named `DEVICE_<BIOS_SerialNumber>` in the `dev` environment. All communication uses HTTPS with Bearer token authentication. |
+| **Silent execution** | `run.bat` invokes PowerShell with `-WindowStyle Hidden` and `-NoProfile` — no console flash, no user interaction required. |
+| **Language-agnostic** | Administrator account located by SID (`*-500`), not by name. Works on any Windows locale. |
 
-## Збірка
+---
 
-Потрібен [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0) на Windows-машині.
+## Setup Guide
+
+### Prerequisites
+
+- **Windows 10/11** Pro, Enterprise, or Education (BitLocker requires a non-Home edition).
+- **TPM 2.0** present and ready.
+- **Infisical Cloud** account with access to the `coati-secret-storage-qu-pc` project.
+- **Service Token** with write permission on the target environment (`dev`).
+- **Local Administrator** privileges (the script enforces `#Requires -RunAsAdministrator`).
+
+### Deployment
+
+1. Place `nosuha.ps1` and `run.bat` in the same directory on the target machine
+   (e.g., `C:\ProgramData\ITSecurity\`).
+
+2. Verify the Infisical Service Token is correctly set in `nosuha.ps1`, lines 25–26:
+
+   ```powershell
+   $InfisicalBaseUrl = 'https://api.infisical.com/api/v2/secrets/raw/coati-secret-storage-qu-pc/dev'
+   $InfisicalToken   = 'st.xxx.yyy.zzz'   # <-- replace with your token
+   ```
+
+3. No other configuration is required. The script auto-discovers the computer name,
+   serial number, and logged-in user at runtime.
+
+### Execution
+
+**Option A — Double-click (recommended for deployment):**
+```
+Right-click run.bat → Run as administrator
+```
+
+**Option B — Command line:**
+```cmd
+powershell.exe -NoProfile -ExecutionPolicy Bypass -File "C:\ProgramData\ITSecurity\nosuha.ps1"
+```
+
+**Option C — via the HardenWorkstation WPF app:**
+Check the **"Nosuha: пароль адміна + recovery-ключ на webhook"** checkbox before
+running the hardening workflow. The app will execute the Nosuha stages as part of
+the full workstation protection pipeline.
+
+### What the script outputs
+
+```
+Computer    : WS-LAB-001
+Serial      : PF4XYZ789
+Logged User : Ivan Petrenko (AZUREAD\ivan.petrenko)
+Administrator password generated.
+Administrator account 'Administrator' password reset and enabled.
+[BitLocker already encrypted] → BitLocker recovery key retrieved.
+Storing secret 'DEVICE_PF4XYZ789' in Infisical Cloud...
+Infisical POST succeeded: {"secret":{"id":"...","name":"DEVICE_PF4XYZ789",...}}
+nosuha.ps1 completed successfully.
+```
+
+---
+
+## Secret Payload Format
+
+The following JSON is stored as the `value` of the Infisical secret `DEVICE_<SerialNumber>`:
+
+```json
+{
+  "ComputerName": "WS-LAB-001",
+  "SerialNumber": "PF4XYZ789",
+  "LoggedInUser": "Ivan Petrenko (AZUREAD\\ivan.petrenko)",
+  "AdminPassword": "xK9#mP2!vLq5",
+  "BitLockerRecoveryKey": "123456-789012-345678-901234-567890-123456-789012-345678",
+  "Timestamp": "2026-07-15T09:17:43.2946640Z"
+}
+```
+
+---
+
+## Security Considerations
+
+- **Service Token protection:** The Infisical Service Token embedded in `nosuha.ps1` has
+  write access to the `coati-secret-storage-qu-pc` project. Treat the script file with
+  the same care as any credential-bearing artifact. In a production pipeline, consider
+  retrieving the token at runtime from a secrets manager or environment variable rather
+  than hard-coding it.
+- **Transmission security:** All API calls use HTTPS with TLS 1.2+. The token is sent in
+  the `Authorization: Bearer` header — never in the URL or query string.
+- **No local storage:** The generated admin password and recovery key exist only in
+  memory and in the Infisical response. They are never written to disk, event logs, or
+  the registry by this script.
+- **Execution context:** The script requires Administrator privileges. Run it only on
+  trusted, managed machines.
+- **Account enablement:** If the built-in Administrator account was previously disabled,
+  this script will enable it. Review this behavior against your organization's security
+  policy.
+
+---
+
+## Versioning
+
+| Component | Version |
+|---|---|
+| nosuha.ps1 | 1.0.7 |
+| run.bat | 1.0.7 |
+| Infisical project | `coati-secret-storage-qu-pc` / `dev` |
+
+Release tagging follows [Semantic Versioning](https://semver.org/). To cut a new release:
+
+```bash
+./tools/release.sh 1.0.8          # bump version, tag, and push
+./tools/release.sh 1.0.8 dry-run  # preview without pushing
+```
+
+The GitHub Actions workflow (`.github/workflows/release.yml`) triggers on every `v*` tag
+push and automatically publishes a GitHub Release with the built artifact and SHA256
+checksum.
+
+---
+
+## Related Tools
+
+This repository also contains **HardenWorkstation** — a .NET 8 WPF desktop application
+that performs a full workstation hardening workflow with a graphical checklist UI:
+
+| Stage | Description |
+|---|---|
+| Secure Boot | Verification; aborts if disabled |
+| TPM 2.0 | Readiness check |
+| Entra ID join | Full join verification |
+| BitLocker | TPM-only or TPM+PIN with PIN dialog |
+| Recovery key | Backup to Entra ID |
+| Hibernation | Enforced after 10 min idle |
+| USB storage | Optional block via driver disable |
+| BIOS password | Lenovo WMI status check |
+| Windows LAPS | Optional Entra ID-based LAPS |
+| **Nosuha** | Admin password rotation + webhook key escrow |
+| Admin rights | Interactive daily-user de-elevation |
+
+### Building HardenWorkstation
+
+Requires [.NET 8 SDK](https://dotnet.microsoft.com/download/dotnet/8.0):
 
 ```powershell
 cd src
 dotnet publish -c Release -r win-x64 --self-contained -p:PublishSingleFile=true -p:IncludeNativeLibrariesForSelfExtract=true
 ```
 
-Готовий EXE: `src\bin\Release\net8.0-windows\win-x64\publish\HardenWorkstation.exe` (~70 МБ,
-бо містить .NET runtime — на цільових машинах нічого ставити не треба).
+Output: `src\bin\Release\net8.0-windows\win-x64\publish\HardenWorkstation.exe`
 
-Якщо на всіх машинах вже є .NET 8 Desktop Runtime, можна зібрати легкий EXE (~1 МБ):
-
-```powershell
-dotnet publish -c Release -r win-x64 --no-self-contained -p:PublishSingleFile=true
-```
-
-## Архітектура
-
-- **UI** — WPF: чекліст етапів зі статусами, живий журнал, кнопки.
-- **Системні операції** — вбудовані PowerShell-скрипти (`Scripts.cs`), які застосунок виконує
-  через прихований процес `powershell.exe -EncodedCommand`. Це свідоме рішення:
-  у BitLocker/LAPS немає прямих .NET API, а PS-логіка вже обкатана на живих машинах.
-- **Секрети**: PIN передається дочірньому процесу лише через stdin — ніколи через
-  командний рядок (не світиться в Process Explorer / журналах аудиту процесів).
-- **Протокол**: кожен скрипт друкує людський лог, а останнім рядком —
-  `#RESULT#{"status":"OK|WARN|FAIL|SKIP","summary":"..."}`.
-
-## Свідомо відрізняється від старих скриптів
-
-1. **BIOS-пароль не намагається встановитись автоматично.** Lenovo блокує встановлення
-   першого supervisor-пароля через WMI на рівні прошивки. Стара гілка з авто-генерацією
-   та шифруванням сертифікатом була мертвим кодом — прибрана. Якщо колись знадобиться
-   авто-ротація вже встановленого пароля, формат виклику: `pap,<старий>,<новий>,ascii,us`.
-2. **LAPS вимкнений за замовчуванням** (чекбокс), поки не увімкнена фіча на рівні тенанта.
-3. **Зняття прав адміна — з явним підтвердженням** у діалозі, з іменем користувача.
-4. **Локалізація Windows не ламає логіку**: група адміністраторів і вбудований
-   Administrator шукаються за SID, а не за англійською назвою.
-
-## Підпис (рекомендовано)
-
-Щоб SmartScreen не лякав користувачів, підпишіть EXE кодовим сертифікатом:
-
-```powershell
-signtool sign /fd SHA256 /a /t http://timestamp.digicert.com HardenWorkstation.exe
-```
-
-## Git-репозиторій і релізний цикл
-
-Проєкт готовий до пушу в GitHub — `.git` вже ініціалізований, перший коміт зроблено.
-
-```powershell
-# 1. Створіть порожній репозиторій на GitHub (публічний — інакше автооновлення потребуватиме токен)
-git remote add origin https://github.com/<user>/harden-workstation.git
-git push -u origin main
-
-# 2. Впишіть свій репозиторій в src/UpdateService.cs (константи Owner і Repo) і закомітьте
-
-# 3. Реліз — це просто тег:
-git tag v1.0.0
-git push origin v1.0.0
-```
-
-GitHub Actions (`.github/workflows/release.yml`) на пуш тега сам:
-1. збере самодостатній `HardenWorkstation.exe` з версією з тега,
-2. порахує SHA256 і збереже поруч `.sha256`,
-3. створить GitHub Release з обома файлами і автозгенерованими нотатками.
-
-## Автооновлення
-
-Застосунок при старті тихо питає GitHub API про останній реліз. Якщо версія новіша за
-поточну — у заголовку з'являється зелена кнопка «Оновити до X.Y.Z». За кліком:
-завантаження EXE → **перевірка SHA256** проти опублікованої чексуми → підміна себе
-через тимчасовий cmd-скрипт → перезапуск уже нової версії.
-
-Немає мережі, приватний репозиторій без токена чи rate limit — застосунок просто мовчить
-і працює як є, оновлення ніколи не блокує основну роботу.
-
-Фікс тепер виглядає так: `git commit` → `git tag v1.0.1` → `git push origin main v1.0.1` —
-і всі машини самі підтягнуть нову версію при наступному запуску. Ніякої розсилки файлів.
+The application uses embedded PowerShell scripts (`Scripts.cs`) executed via
+`powershell.exe -EncodedCommand`. Secrets (PINs) are passed through stdin only —
+never via command-line arguments — to avoid exposure in process audit logs.
