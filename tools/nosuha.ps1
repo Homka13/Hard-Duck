@@ -6,15 +6,18 @@
     nosuha.ps1 виконує наступні кроки:
     1. Збирає ім'я комп'ютера та серійний номер BIOS.
     2. Визначає поточного інтерактивного користувача (повне ім'я, якщо можливо).
-    3. Генерує криптостійкий 12-значний пароль.
+    3. Генерує криптостійкий 12-значний пароль (RandomNumberGenerator).
     4. Скидає пароль вбудованого облікового запису Administrator (RID -500) і вмикає його.
-    5. Перевіряє статус BitLocker на C:. Якщо диск повністю розшифровано, вмикає
-       BitLocker із протектором TPM-only (XtsAes256) і отримує пароль відновлення.
+    5. Перевіряє статус BitLocker на C:. Якщо розшифровано — вмикає TPM-only (XtsAes256).
+       Якщо протектор RecoveryPassword відсутній — додає його. Якщо вже є — перевикористовує.
     6. Зберігає зібрані секрети як JSON у Infisical Cloud під ключем
        DEVICE_<СерійнийНомер> у середовищі 'dev'.
 #>
 
 #Requires -RunAsAdministrator
+
+# Примусове UTF-8 виведення — українські символи без кракозябр
+[Console]::OutputEncoding = [System.Text.Encoding]::UTF8
 
 $ErrorActionPreference = 'Stop'
 $ProgressPreference    = 'SilentlyContinue'
@@ -27,37 +30,44 @@ $InfisicalToken   = 'st.b23fd0af-ba6d-4888-8e18-2f31ac73a82e.2d2e6efd17805670421
 
 # ----------------------------------------------------------------
 # Допоміжна функція: генерація криптостійкого пароля
+# Використовує System.Security.Cryptography.RandomNumberGenerator —
+# сучасний, безпечний API без проблем сумісності з PowerShell 5.1/7.
 # ----------------------------------------------------------------
 function New-RandomPassword {
     param([int]$Length = 12)
 
     # Набори символів — неоднозначні (O, 0, I, l, 1) виключено для читабельності
-    $upper   = 'ABCDEFGHJKMNPQRSTUVWXYZ'.ToCharArray()
-    $lower   = 'abcdefghjkmnpqrstuvwxyz'.ToCharArray()
-    $digits  = '23456789'.ToCharArray()
-    $special = '!@#$%&*-_+=?'.ToCharArray()
+    $upper   = 'ABCDEFGHJKMNPQRSTUVWXYZ'
+    $lower   = 'abcdefghjkmnpqrstuvwxyz'
+    $digits  = '23456789'
+    $special = '!@#$%&*-_+=?'
+    $all     = $upper + $lower + $digits + $special
 
-    $pool = $upper + $lower + $digits + $special
-    $rng  = [System.Security.Cryptography.RNGCryptoServiceProvider]::new()
-    $bytes = [byte[]]::new($Length)
+    $rng   = [System.Security.Cryptography.RandomNumberGenerator]::Create()
+    $bytes = [byte[]]::new(4)
+    $chars = [char[]]::new($Length)
 
     # Гарантуємо хоча б один символ кожного класу
-    $chars = @(
-        $upper[0..($rng.GetBytes($bytes); $bytes[0] % $upper.Length)][0],
-        $lower[0..($rng.GetBytes($bytes); $bytes[0] % $lower.Length)][0],
-        $digits[0..($rng.GetBytes($bytes); $bytes[0] % $digits.Length)][0],
-        $special[0..($rng.GetBytes($bytes); $bytes[0] % $special.Length)][0]
-    )
-    # Заповнюємо решту випадковими символами
+    $rng.GetBytes($bytes); $chars[0] = $upper[[int]($bytes[0] % $upper.Length)]
+    $rng.GetBytes($bytes); $chars[1] = $lower[[int]($bytes[0] % $lower.Length)]
+    $rng.GetBytes($bytes); $chars[2] = $digits[[int]($bytes[0] % $digits.Length)]
+    $rng.GetBytes($bytes); $chars[3] = $special[[int]($bytes[0] % $special.Length)]
+
+    # Заповнюємо решту випадковими символами з повного пулу
     for ($i = 4; $i -lt $Length; $i++) {
         $rng.GetBytes($bytes)
-        $chars += $pool[$bytes[0] % $pool.Length]
+        $chars[$i] = $all[[int]($bytes[0] % $all.Length)]
     }
-    $rng.Dispose()
 
-    # Перемішуємо для непередбачуваності
-    $random = [System.Random]::new()
-    ($chars | Sort-Object { $random.Next() }) -join ''
+    # Fisher–Yates перемішування (криптостійке, не залежить від Sort-Object)
+    for ($i = $Length - 1; $i -gt 0; $i--) {
+        $rng.GetBytes($bytes)
+        $j = [int]($bytes[0] % ($i + 1))
+        $tmp = $chars[$i]; $chars[$i] = $chars[$j]; $chars[$j] = $tmp
+    }
+
+    $rng.Dispose()
+    return [string]::new($chars)
 }
 
 # ----------------------------------------------------------------
@@ -136,13 +146,17 @@ try {
 }
 
 # ----------------------------------------------------------------
-# 5. BitLocker — перевірка статусу та ввімкнення за потреби
+# 5. BitLocker — перевірка статусу, увімкнення та отримання ключа
+#    Уникає помилки 0x80310031: перед додаванням протектора перевіряє,
+#    чи RecoveryPassword уже існує. Якщо так — перевикористовує.
 # ----------------------------------------------------------------
 $BitLockerRecoveryKey = 'N/A'
 
 try {
+    Import-Module BitLocker -ErrorAction SilentlyContinue
     $blVolume = Get-BitLockerVolume -MountPoint 'C:' -ErrorAction Stop
 
+    # ── Крок 5a: увімкнути BitLocker, якщо диск розшифровано ──
     if ($blVolume.ProtectionStatus -eq 'Off' -and $blVolume.VolumeStatus -eq 'FullyDecrypted') {
         Write-Host 'C: повністю розшифровано. Увімкнення BitLocker (XtsAes256, TPM-only)...'
 
@@ -152,33 +166,62 @@ try {
             -SkipHardwareTest `
             -ErrorAction Stop
 
-        Write-Host 'Шифрування BitLocker запущено. Очікування протектора TPM...'
+        Write-Host 'Шифрування BitLocker запущено. Очікування появи RecoveryPassword протектора...'
 
-        # Даємо час на ініціалізацію TPM-протектора та генерацію
-        # пароля відновлення — опитування до 120 секунд.
+        # Опитування до 120 секунд — Enable-BitLocker автоматично створює
+        # RecoveryPassword, але йому потрібен час на ініціалізацію TPM
         $timeout = [DateTime]::Now.AddSeconds(120)
-        $keyProtector = $null
-        while ([DateTime]::Now -lt $timeout -and -not $keyProtector) {
+        $kp = $null
+        while ([DateTime]::Now -lt $timeout -and -not $kp) {
             Start-Sleep -Seconds 5
-            $keyProtector = (Get-BitLockerVolume -MountPoint 'C:').KeyProtector |
+            $kp = (Get-BitLockerVolume -MountPoint 'C:').KeyProtector |
                 Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' } |
                 Select-Object -First 1
         }
     }
 
-    # Якщо вже захищено (або після ввімкнення) — отримуємо ключ відновлення
-    $keyProtector = (Get-BitLockerVolume -MountPoint 'C:').KeyProtector |
+    # ── Крок 5b: оновити стан тому після можливого ввімкнення ──
+    $blVolume = Get-BitLockerVolume -MountPoint 'C:'
+    $existingKp = $blVolume.KeyProtector |
         Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' } |
         Select-Object -First 1
 
-    if ($keyProtector) {
-        $BitLockerRecoveryKey = $keyProtector.RecoveryPassword
-        Write-Host 'Ключ відновлення BitLocker отримано.'
-    } else {
-        Write-Warning 'Протектор RecoveryPassword BitLocker не знайдено на C:.'
+    if ($existingKp) {
+        # Протектор уже існує — використовуємо його (уникаємо 0x80310031)
+        $BitLockerRecoveryKey = $existingKp.RecoveryPassword
+        Write-Host "Ключ відновлення BitLocker отримано (протектор ID: $($existingKp.KeyProtectorId))."
     }
-} catch {
-    Write-Warning "Помилка операції BitLocker: $_"
+    else {
+        # Протектора немає — безпечно додаємо новий
+        Write-Host 'Протектор RecoveryPassword відсутній — додаю...'
+        try {
+            $addedKp = Add-BitLockerKeyProtector -MountPoint 'C:' `
+                -RecoveryPasswordProtector -ErrorAction Stop
+
+            # Повторне читання тому для отримання RecoveryPassword
+            Start-Sleep -Seconds 3
+            $blVolume = Get-BitLockerVolume -MountPoint 'C:'
+            $reReadKp = $blVolume.KeyProtector |
+                Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' } |
+                Select-Object -First 1
+
+            if ($reReadKp) {
+                $BitLockerRecoveryKey = $reReadKp.RecoveryPassword
+                Write-Host "Протектор RecoveryPassword успішно додано (ID: $($reReadKp.KeyProtectorId))."
+            }
+            else {
+                Write-Warning 'Протектор додано, але не вдалося прочитати RecoveryPassword після додавання.'
+            }
+        }
+        catch {
+            Write-Warning "Не вдалося додати протектор RecoveryPassword: $_"
+            Write-Warning 'Ключ відновлення BitLocker залишиться N/A у секреті Infisical.'
+        }
+    }
+}
+catch {
+    Write-Warning "Критична помилка операції BitLocker: $_"
+    Write-Warning 'Ключ відновлення BitLocker залишиться N/A у секреті Infisical.'
 }
 
 # ----------------------------------------------------------------
