@@ -370,7 +370,7 @@ public static class Scripts
         """;
 
     // ────────────────────────────────────────────────────────────
-    //  Nosuha / ZTP webhook-орієнтовані етапи
+    //  Hard-Duck / ZTP webhook-орієнтовані етапи
     // ────────────────────────────────────────────────────────────
 
     /// <summary>
@@ -378,7 +378,7 @@ public static class Scripts
     /// Administrator (SID *-500), вмикає обліковий запис і повертає JSON:
     /// {"password":"...", "computer":"...", "serial":"...", "user":"..."}
     /// </summary>
-    public const string NosuhaAdminPassword = Prolog + """
+    public const string HardDuckAdminPassword = Prolog + """
         function Main {
             # ── Машинна інформація ──
             $computer = $env:COMPUTERNAME
@@ -461,7 +461,7 @@ public static class Scripts
     /// Дістає BitLocker RecoveryPassword-протектор для диска C:.
     /// Повертає 48-значний ключ у summary або порожній рядок при SKIP.
     /// </summary>
-    public const string NosuhaGetRecoveryKey = Prolog + """
+    public const string HardDuckGetRecoveryKey = Prolog + """
         function Main {
             Import-Module BitLocker -ErrorAction SilentlyContinue
             try {
@@ -496,7 +496,7 @@ public static class Scripts
     /// Рядок 2 stdin — JSON із полями: ComputerName, SerialNumber, LoggedInUser,
     /// AdminPassword, BitLockerRecoveryKey, Timestamp.
     /// </summary>
-    public const string NosuhaSendToWebhook = Prolog + """
+    public const string HardDuckSendToWebhook = Prolog + """
         function Main {
             $webhookUrl = [Console]::In.ReadLine()
             $jsonPayload = [Console]::In.ReadLine()

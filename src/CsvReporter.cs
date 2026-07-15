@@ -18,7 +18,7 @@ public static class CsvReporter
         "Computer", "Timestamp", "SecureBoot", "TPM",
         "BitLockerPin", "Hibernation",
         "UsbStorage", "BiosPassword", "LAPS",
-        "NosuhaAdmin", "NosuhaWebhook", "AdminRemoved"
+        "HardDuck", "AdminRemoved"
     };
 
     public static string Append(IReadOnlyDictionary<string, string> values)

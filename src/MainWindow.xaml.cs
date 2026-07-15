@@ -8,8 +8,8 @@ namespace HardDuck;
 
 public partial class MainWindow : Window
 {
-    /// <summary>Пряме посилання на raw-версію nosuha.ps1 у публічному Git-репозиторії.</summary>
-    private const string NosuhaScriptUrl = "https://raw.githubusercontent.com/Homka13/Hard-Duck/main/tools/nosuha.ps1";
+    /// <summary>Пряме посилання на raw-версію hard-duck.ps1 у публічному Git-репозиторії.</summary>
+    private const string HardDuckScriptUrl = "https://raw.githubusercontent.com/Homka13/Hard-Duck/main/tools/hard-duck.ps1";
     private readonly ObservableCollection<StageVm> _stages = new();
     private readonly Dictionary<string, StageVm> _byKey = new();
 
@@ -25,7 +25,7 @@ public partial class MainWindow : Window
         AddStage("UsbStorage", "USB-накопичувачі заборонено");
         AddStage("BiosPassword", "Пароль BIOS/UEFI (Lenovo)");
         AddStage("LAPS", "Windows LAPS");
-        AddStage("Nosuha", "Nosuha: пароль адміна + BitLocker → Infisical");
+        AddStage("HardDuck", "Hard-Duck: пароль адміна + BitLocker → Infisical");
         AddStage("AdminRemoved", "Права адміністратора користувача");
 
         StageList.ItemsSource = _stages;
@@ -127,7 +127,7 @@ public partial class MainWindow : Window
         UsbToggle.IsEnabled = false;
         BiosToggle.IsEnabled = false;
         BitLockerPinToggle.IsEnabled = false;
-        NosuhaToggle.IsEnabled = false;
+        HardDuckToggle.IsEnabled = false;
         RebootButton.Visibility = Visibility.Collapsed;
         LogBox.Document.Blocks.Clear();
         foreach (var s in _stages) { s.Status = StageStatus.Pending; s.Summary = "очікує"; }
@@ -242,17 +242,17 @@ public partial class MainWindow : Window
                     report["LAPS"] = "SKIP - вимкнено оператором";
                 }
 
-                // ── Nosuha: завантажити nosuha.ps1 з GitHub, виконати, прибрати за собою ──
-                if (NosuhaToggle.IsChecked == true)
+                // ── Hard-Duck: завантажити hard-duck.ps1 з GitHub, виконати, прибрати за собою ──
+                if (HardDuckToggle.IsChecked == true)
                 {
-                    SetStage("Nosuha", StageStatus.Running, "завантаження скрипта…");
-                    Log("── Nosuha: завантаження nosuha.ps1 з GitHub ──");
-                    await DownloadAndRunNosuhaAsync(report, ct);
+                    SetStage("HardDuck", StageStatus.Running, "завантаження скрипта…");
+                    Log("── Hard-Duck: завантаження hard-duck.ps1 з GitHub ──");
+                    await DownloadAndRunHardDuckAsync(report, ct);
                 }
                 else
                 {
-                    SetStage("Nosuha", StageStatus.Skip, "SKIP - вимкнено оператором");
-                    report["Nosuha"] = "SKIP - вимкнено оператором";
+                    SetStage("HardDuck", StageStatus.Skip, "SKIP - вимкнено оператором");
+                    report["HardDuck"] = "SKIP - вимкнено оператором";
                 }
 
                 // ── Зняття прав адміна: спершу визначаємо користувача, потім явне підтвердження ──
@@ -318,22 +318,22 @@ public partial class MainWindow : Window
             UsbToggle.IsEnabled = true;
             BiosToggle.IsEnabled = true;
             BitLockerPinToggle.IsEnabled = true;
-            NosuhaToggle.IsEnabled = true;
+            HardDuckToggle.IsEnabled = true;
         }
     }
 
-    private async Task DownloadAndRunNosuhaAsync(Dictionary<string, string> report, CancellationToken ct)
+    private async Task DownloadAndRunHardDuckAsync(Dictionary<string, string> report, CancellationToken ct)
     {
-        var scriptPath = Path.Combine(Path.GetTempPath(), "nosuha_runtime.ps1");
+        var scriptPath = Path.Combine(Path.GetTempPath(), "hard-duck_runtime.ps1");
         try
         {
-            // ── Завантажити nosuha.ps1 з публічного Git-репозиторію ──
-            SetStage("Nosuha", StageStatus.Running, "завантаження…");
+            // ── Завантажити hard-duck.ps1 з публічного Git-репозиторію ──
+            SetStage("HardDuck", StageStatus.Running, "завантаження…");
             using var http = new HttpClient();
             http.Timeout = TimeSpan.FromSeconds(30);
-            var scriptText = await http.GetStringAsync(NosuhaScriptUrl, ct);
+            var scriptText = await http.GetStringAsync(HardDuckScriptUrl, ct);
             await File.WriteAllTextAsync(scriptPath, scriptText, ct);
-            Log("[OK] nosuha.ps1 завантажено з GitHub.");
+            Log("[OK] hard-duck.ps1 завантажено з GitHub.");
 
             // ── Зібрати аргументи зі стану чекбоксів UI ──
             var argList = new List<string>();
@@ -342,34 +342,34 @@ public partial class MainWindow : Window
             if (BiosToggle.IsChecked == true) argList.Add("-EnableBIOSPassword");
             if (BitLockerPinToggle.IsChecked == true) argList.Add("-EnableBitLockerPIN");
             if (LapsToggle.IsChecked == true) argList.Add("-EnableLAPS");
-            if (NosuhaToggle.IsChecked == true) argList.Add("-EnableNosuhaAdmin");
+            if (HardDuckToggle.IsChecked == true) argList.Add("-EnableHardDuckAdmin");
             var extraArgs = string.Join(" ", argList);
 
             // ── Виконати завантажений скрипт ──
-            SetStage("Nosuha", StageStatus.Running, "виконується…");
-            Log($"── Nosuha: виконання (аргументи: {(extraArgs.Length > 0 ? extraArgs : "(без прапорців)")}) ──");
+            SetStage("HardDuck", StageStatus.Running, "виконується…");
+            Log($"── Hard-Duck: виконання (аргументи: {(extraArgs.Length > 0 ? extraArgs : "(без прапорців)")}) ──");
             var (exitCode, _) = await PowerShellRunner.RunExternalScriptAsync(scriptPath, extraArgs, Log, ct);
 
             if (exitCode == 0)
             {
-                SetStage("Nosuha", StageStatus.OK, "OK — пароль адміна оновлено, ключ відправлено в Infisical");
-                report["Nosuha"] = "OK";
+                SetStage("HardDuck", StageStatus.OK, "OK — пароль адміна оновлено, ключ відправлено в Infisical");
+                report["HardDuck"] = "OK";
             }
             else
             {
-                SetStage("Nosuha", StageStatus.Fail, $"FAIL — скрипт завершився з кодом {exitCode}");
-                report["Nosuha"] = $"FAIL — exit code {exitCode}";
+                SetStage("HardDuck", StageStatus.Fail, $"FAIL — скрипт завершився з кодом {exitCode}");
+                report["HardDuck"] = $"FAIL — exit code {exitCode}";
             }
         }
         catch (HttpRequestException ex)
         {
-            SetStage("Nosuha", StageStatus.Fail, "FAIL — не вдалось завантажити скрипт: " + ex.Message);
-            report["Nosuha"] = "FAIL — завантаження: " + ex.Message;
+            SetStage("HardDuck", StageStatus.Fail, "FAIL — не вдалось завантажити скрипт: " + ex.Message);
+            report["HardDuck"] = "FAIL — завантаження: " + ex.Message;
         }
         catch (Exception ex)
         {
-            SetStage("Nosuha", StageStatus.Fail, "FAIL — " + ex.Message);
-            report["Nosuha"] = "FAIL: " + ex.Message;
+            SetStage("HardDuck", StageStatus.Fail, "FAIL — " + ex.Message);
+            report["HardDuck"] = "FAIL: " + ex.Message;
         }
         finally
         {

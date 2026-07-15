@@ -3,7 +3,7 @@
     Скрипт Zero-Touch Provisioning — керує паролем локального адміністратора
     та передає ключ відновлення BitLocker до Infisical Cloud.
 .DESCRIPTION
-    nosuha.ps1 виконує наступні кроки:
+    hard-duck.ps1 виконує наступні кроки:
     1. Збирає ім'я комп'ютера та серійний номер BIOS.
     2. Визначає поточного інтерактивного користувача (повне ім'я, якщо можливо).
     3. Генерує криптостійкий 12-значний пароль (RandomNumberGenerator).
@@ -31,7 +31,7 @@ param(
     [switch]$EnableBIOSPassword,
     [switch]$EnableBitLockerPIN,
     [switch]$EnableLAPS,
-    [switch]$EnableNosuhaAdmin
+    [switch]$EnableHardDuckAdmin
 )
 
 # ----------------------------------------------------------------
@@ -105,10 +105,10 @@ if ($EnableLAPS) {
 }
 
 # ================================================================
-#  EnableNosuhaAdmin — пароль адміністратора + BitLocker → Infisical
+#  EnableHardDuckAdmin — пароль адміністратора + BitLocker → Infisical
 # ================================================================
-if ($EnableNosuhaAdmin) {
-    Write-Host '── Nosuha: адмін + BitLocker → Infisical ──'
+if ($EnableHardDuckAdmin) {
+    Write-Host '── Hard-Duck: адмін + BitLocker → Infisical ──'
 
 # ----------------------------------------------------------------
 # Допоміжна функція: генерація криптостійкого пароля
@@ -373,6 +373,6 @@ else {
     }
 }
 
-}  # end if ($EnableNosuhaAdmin)
+}  # end if ($EnableHardDuckAdmin)
 
-Write-Host 'nosuha.ps1 успішно завершено.'
+Write-Host 'hard-duck.ps1 успішно завершено.'

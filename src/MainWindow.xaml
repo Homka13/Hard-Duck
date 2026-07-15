@@ -108,12 +108,12 @@
                                    Foreground="{StaticResource MaterialDesignBody}"/>
                     </StackPanel>
                     <StackPanel Orientation="Horizontal">
-                        <ToggleButton x:Name="NosuhaToggle" IsChecked="True"
+                        <ToggleButton x:Name="HardDuckToggle" IsChecked="True"
                                       Style="{StaticResource MaterialDesignSwitchToggleButton}"
                                       ToolTip="Пароль адміна + BitLocker recovery-ключ → Infisical"
                                       VerticalAlignment="Center"
                                       Checked="OnToggleChanged" Unchecked="OnToggleChanged"/>
-                        <TextBlock Text="Nosuha: адмін + BitLocker → Infisical"
+                        <TextBlock Text="Hard-Duck: адмін + BitLocker → Infisical"
                                    VerticalAlignment="Center" Margin="8,0,0,0"
                                    Foreground="{StaticResource MaterialDesignBody}"/>
                     </StackPanel>
