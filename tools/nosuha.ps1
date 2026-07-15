@@ -24,7 +24,7 @@ $ProgressPreference    = 'SilentlyContinue'
 
 # ----------------------------------------------------------------
 # Конфігурація — Infisical Cloud (V3 API)
-# Токен: змінна середовища $env:INFISICAL_TOKEN
+# Токен: вбудовано в секції 6 (для standalone EXE)
 # ----------------------------------------------------------------
 
 # ----------------------------------------------------------------
@@ -254,10 +254,13 @@ else {
     $TargetUser = if ([string]::IsNullOrWhiteSpace($DailyUser)) { "local" } else { $DailyUser }
     $SecretName = "BITLOCKER_$($env:COMPUTERNAME)_$TargetUser"
 
-    # Конфігурація Infisical V3 API
+    # Hardcoded Token for standalone EXE execution
+    $INFISICAL_TOKEN = "st.b23fd0af-ba6d-4888-8e18-2f31ac73a82e.2d2e6efd178056704215dfb47aaee5d6.5780902e694adb8d37ab433ccfb410b1"
+
+    # Infisical V3 API Configuration
     $Uri = "https://app.infisical.com/api/v3/secrets/raw/$SecretName"
     $Headers = @{
-        "Authorization" = "Bearer $env:INFISICAL_TOKEN"
+        "Authorization" = "Bearer $INFISICAL_TOKEN"
         "Content-Type"  = "application/json"
     }
 
