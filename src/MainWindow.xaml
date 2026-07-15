@@ -1,73 +1,175 @@
 <Window x:Class="HardDuck.MainWindow"
         xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
         xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
-        Title="Захист робочої станції"
-        Width="860" Height="640" MinWidth="720" MinHeight="520"
+        xmlns:materialDesign="http://materialdesigninxaml.net/winfx/xaml/themes"
+        Title="Hard-Duck — Захист робочої станції"
+        Width="880" Height="720" MinWidth="760" MinHeight="600"
         WindowStartupLocation="CenterScreen"
-        Background="#14161C"
-        FontFamily="Segoe UI" FontSize="13"
-        Foreground="#E8EAF0">
-    <Grid Margin="24,20,24,16">
+        Background="{StaticResource MaterialDesignBackground}"
+        FontFamily="{StaticResource MaterialDesignFont}"
+        Foreground="{StaticResource MaterialDesignBody}"
+        TextElement.Foreground="{StaticResource MaterialDesignBody}">
+
+    <Grid Margin="20">
         <Grid.RowDefinitions>
+            <RowDefinition Height="Auto"/>
+            <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="Auto"/>
             <RowDefinition Height="*"/>
             <RowDefinition Height="Auto"/>
         </Grid.RowDefinitions>
 
-        <!-- Заголовок -->
+        <!-- ── Заголовок ── -->
         <Grid Grid.Row="0" Margin="0,0,0,14">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
             <StackPanel Grid.Column="0">
-                <TextBlock Text="Захист робочої станції" FontSize="22" FontWeight="SemiBold"/>
-                <TextBlock x:Name="ComputerText" Foreground="#8A93A6" Margin="0,2,0,0"/>
+                <TextBlock Text="HARD-DUCK" FontSize="26" FontWeight="Bold"
+                           Foreground="{StaticResource AccentBrush}" FontFamily="Consolas"
+                           LetterSpacing="3"/>
+                <TextBlock x:Name="ComputerText"
+                           Foreground="{StaticResource MaterialDesignBodyLight}"
+                           FontSize="12" Margin="0,2,0,0"/>
             </StackPanel>
             <Button x:Name="UpdateButton" Grid.Column="1"
+                    Style="{StaticResource MaterialDesignFlatButton}"
+                    Content="ОНОВИТИ"
                     Visibility="Collapsed" VerticalAlignment="Top"
-                    Padding="14,7" Background="#2E7D4F" Foreground="White" BorderBrush="#2E7D4F"
+                    Foreground="{StaticResource StatusOkBrush}"
                     Click="OnUpdate"/>
         </Grid>
 
-        <!-- Опції -->
-        <StackPanel Grid.Row="1" Orientation="Horizontal" Margin="0,0,0,10">
-            <CheckBox x:Name="SecureBootCheck" Content="Перевіряти Secure Boot" IsChecked="True"
-                      Foreground="#E8EAF0" VerticalAlignment="Center" Margin="0,0,20,0"
-                      ToolTip="Перевіряє, чи ввімкнено Secure Boot в UEFI. Якщо вимкнено — безпечно пропустити, але рекомендовано ввімкнути перед шифруванням BitLocker."/>
-            <CheckBox x:Name="UsbCheck" Content="Заборонити USB-накопичувачі" IsChecked="True"
-                      Foreground="#E8EAF0" VerticalAlignment="Center" Margin="0,0,20,0"
-                      ToolTip="Флешки, зовнішні диски, SD-картки, телефони як накопичувач. Клавіатури, миші, принтери, гарнітури працюватимуть."/>
-            <CheckBox x:Name="BiosCheck" Content="Перевіряти пароль BIOS/UEFI" IsChecked="True"
-                      Foreground="#E8EAF0" VerticalAlignment="Center" Margin="0,0,20,0"
-                      ToolTip="Перевіряє через Lenovo WMI, чи встановлено supervisor-пароль. Перший пароль все одно ставиться вручну в BIOS (обмеження прошивки)."/>
-            <CheckBox x:Name="BitLockerPinCheck" Content="Питати PIN BitLocker при вмиканні"
-                      Foreground="#E8EAF0" VerticalAlignment="Center" Margin="0,0,20,0"
-                      ToolTip="Вимкнено (за замовчуванням) — лише TPM: диск шифрується тихо, розблоковується автоматично, без запиту при вмиканні. Увімкніть, щоб додати PIN (TPM+PIN) — надійніше, але Windows питатиме PIN до входу при КОЖНОМУ вмиканні."/>
-            <CheckBox x:Name="LapsCheck" Content="Налаштовувати Windows LAPS"
-                      Foreground="#E8EAF0" VerticalAlignment="Center"/>
-            <TextBlock Text="(потребує Enable LAPS = Yes у тенанті Entra)"
-                       Foreground="#5C6474" Margin="8,0,20,0" VerticalAlignment="Center"/>
-            <CheckBox x:Name="NosuhaCheck" Content="Nosuha: пароль адміна + recovery-ключ на webhook"
-                      Foreground="#E8EAF0" VerticalAlignment="Center"
-                      ToolTip="Легковаговий аналог LAPS без Entra ID: генерує пароль для вбудованого Administrator і відправляє його разом із BitLocker recovery-ключем на Google Apps Script webhook."/>
-        </StackPanel>
+        <!-- ── Картка 1: Апаратна безпека ── -->
+        <materialDesign:Card Grid.Row="1" Padding="20,16" Margin="0,0,0,10"
+                             materialDesign:ShadowAssist.ShadowDepth="Depth2">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Text="АПАРАТНА БЕЗПЕКА" FontSize="11" FontWeight="Bold"
+                           Foreground="{StaticResource AccentBrush}" LetterSpacing="2"
+                           Margin="0,0,0,12"/>
+                <UniformGrid Grid.Row="1" Columns="3" HorizontalAlignment="Left">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,30,0">
+                        <ToggleButton x:Name="SecureBootToggle" IsChecked="True"
+                                      Style="{StaticResource MaterialDesignSwitchToggleButton}"
+                                      ToolTip="Перевіряє стан Secure Boot в UEFI"
+                                      VerticalAlignment="Center"
+                                      Checked="OnToggleChanged" Unchecked="OnToggleChanged"/>
+                        <TextBlock Text="Secure Boot" VerticalAlignment="Center" Margin="8,0,0,0"
+                                   Foreground="{StaticResource MaterialDesignBody}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal" Margin="0,0,30,0">
+                        <ToggleButton x:Name="BitLockerPinToggle"
+                                      Style="{StaticResource MaterialDesignSwitchToggleButton}"
+                                      ToolTip="TPM+PIN — PIN питається до входу при кожному вмиканні"
+                                      VerticalAlignment="Center"
+                                      Checked="OnToggleChanged" Unchecked="OnToggleChanged"/>
+                        <TextBlock Text="BitLocker PIN" VerticalAlignment="Center" Margin="8,0,0,0"
+                                   Foreground="{StaticResource MaterialDesignBody}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <ToggleButton x:Name="BiosToggle" IsChecked="True"
+                                      Style="{StaticResource MaterialDesignSwitchToggleButton}"
+                                      ToolTip="Перевіряє пароль BIOS/UEFI через Lenovo WMI"
+                                      VerticalAlignment="Center"
+                                      Checked="OnToggleChanged" Unchecked="OnToggleChanged"/>
+                        <TextBlock Text="Пароль BIOS/UEFI" VerticalAlignment="Center" Margin="8,0,0,0"
+                                   Foreground="{StaticResource MaterialDesignBody}"/>
+                    </StackPanel>
+                </UniformGrid>
+            </Grid>
+        </materialDesign:Card>
 
-        <!-- Основна область: чекліст + лог -->
-        <Grid Grid.Row="2">
+        <!-- ── Картка 2: Контроль доступу ── -->
+        <materialDesign:Card Grid.Row="2" Padding="20,16" Margin="0,0,0,10"
+                             materialDesign:ShadowAssist.ShadowDepth="Depth2">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Text="КОНТРОЛЬ ДОСТУПУ" FontSize="11" FontWeight="Bold"
+                           Foreground="{StaticResource AccentBrush}" LetterSpacing="2"
+                           Margin="0,0,0,12"/>
+                <UniformGrid Grid.Row="1" Columns="2" HorizontalAlignment="Left">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,30,0">
+                        <ToggleButton x:Name="UsbToggle" IsChecked="True"
+                                      Style="{StaticResource MaterialDesignSwitchToggleButton}"
+                                      ToolTip="Блокує флешки, зовнішні диски, SD-картки. HID пристрої працюють."
+                                      VerticalAlignment="Center"
+                                      Checked="OnToggleChanged" Unchecked="OnToggleChanged"/>
+                        <TextBlock Text="Заборонити USB-накопичувачі" VerticalAlignment="Center"
+                                   Margin="8,0,0,0"
+                                   Foreground="{StaticResource MaterialDesignBody}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <ToggleButton x:Name="NosuhaToggle" IsChecked="True"
+                                      Style="{StaticResource MaterialDesignSwitchToggleButton}"
+                                      ToolTip="Пароль адміна + BitLocker recovery-ключ → Infisical"
+                                      VerticalAlignment="Center"
+                                      Checked="OnToggleChanged" Unchecked="OnToggleChanged"/>
+                        <TextBlock Text="Nosuha: адмін + BitLocker → Infisical"
+                                   VerticalAlignment="Center" Margin="8,0,0,0"
+                                   Foreground="{StaticResource MaterialDesignBody}"/>
+                    </StackPanel>
+                </UniformGrid>
+            </Grid>
+        </materialDesign:Card>
+
+        <!-- ── Картка 3: Відповідність системи ── -->
+        <materialDesign:Card Grid.Row="3" Padding="20,16" Margin="0,0,0,10"
+                             materialDesign:ShadowAssist.ShadowDepth="Depth2">
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto"/>
+                    <RowDefinition Height="Auto"/>
+                </Grid.RowDefinitions>
+                <TextBlock Grid.Row="0" Text="ВІДПОВІДНІСТЬ СИСТЕМИ" FontSize="11" FontWeight="Bold"
+                           Foreground="{StaticResource AccentBrush}" LetterSpacing="2"
+                           Margin="0,0,0,12"/>
+                <UniformGrid Grid.Row="1" Columns="2" HorizontalAlignment="Left">
+                    <StackPanel Orientation="Horizontal" Margin="0,0,30,0">
+                        <ToggleButton x:Name="LapsToggle"
+                                      Style="{StaticResource MaterialDesignSwitchToggleButton}"
+                                      ToolTip="Windows LAPS — потребує Enable LAPS = Yes в Entra"
+                                      VerticalAlignment="Center"
+                                      Checked="OnToggleChanged" Unchecked="OnToggleChanged"/>
+                        <TextBlock Text="Windows LAPS" VerticalAlignment="Center" Margin="8,0,0,0"
+                                   Foreground="{StaticResource MaterialDesignBody}"/>
+                    </StackPanel>
+                    <StackPanel Orientation="Horizontal">
+                        <TextBlock Text="Гібернація" VerticalAlignment="Center" Margin="0,0,8,0"
+                                   Foreground="{StaticResource MaterialDesignBodyLight}"/>
+                        <TextBlock Text="(завжди)" VerticalAlignment="Center" FontSize="11"
+                                   Foreground="{StaticResource MaterialDesignBodyLight}"/>
+                    </StackPanel>
+                </UniformGrid>
+            </Grid>
+        </materialDesign:Card>
+
+        <!-- ── Консоль: чекліст + термінал ── -->
+        <Grid Grid.Row="4" Margin="0,6,0,0">
             <Grid.ColumnDefinitions>
                 <ColumnDefinition Width="5*"/>
-                <ColumnDefinition Width="16"/>
+                <ColumnDefinition Width="12"/>
                 <ColumnDefinition Width="6*"/>
             </Grid.ColumnDefinitions>
 
-            <Border Grid.Column="0" Background="#1B1E26" CornerRadius="8" Padding="4">
-                <ScrollViewer VerticalScrollBarVisibility="Auto">
+            <!-- Чекліст -->
+            <materialDesign:Card Grid.Column="0"
+                                 materialDesign:ShadowAssist.ShadowDepth="Depth1">
+                <ScrollViewer VerticalScrollBarVisibility="Auto" Margin="4">
                     <ItemsControl x:Name="StageList">
                         <ItemsControl.ItemTemplate>
                             <DataTemplate>
-                                <Border Padding="12,9" Margin="6,3" Background="#20242F" CornerRadius="6">
+                                <Border Padding="12,9" Margin="6,2"
+                                        Background="{DynamicResource MaterialDesignCardBackground}"
+                                        CornerRadius="4">
                                     <Grid>
                                         <Grid.ColumnDefinitions>
                                             <ColumnDefinition Width="12"/>
@@ -78,10 +180,12 @@
                                                  VerticalAlignment="Center"
                                                  Fill="{Binding StatusBrush}"/>
                                         <StackPanel Grid.Column="2">
-                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold"/>
+                                            <TextBlock Text="{Binding Title}" FontWeight="SemiBold"
+                                                       FontSize="13"/>
                                             <TextBlock Text="{Binding StatusText}"
                                                        Foreground="{Binding StatusBrush}"
-                                                       TextWrapping="Wrap" Margin="0,2,0,0"/>
+                                                       TextWrapping="Wrap" Margin="0,2,0,0"
+                                                       FontSize="11"/>
                                         </StackPanel>
                                     </Grid>
                                 </Border>
@@ -89,43 +193,65 @@
                         </ItemsControl.ItemTemplate>
                     </ItemsControl>
                 </ScrollViewer>
-            </Border>
+            </materialDesign:Card>
 
-            <Border Grid.Column="2" Background="#0F1116" CornerRadius="8" Padding="10">
+            <!-- Термінал -->
+            <Border Grid.Column="2" Background="{StaticResource TerminalBackground}"
+                    CornerRadius="6" Padding="2">
                 <Grid>
                     <Grid.RowDefinitions>
                         <RowDefinition Height="Auto"/>
                         <RowDefinition Height="*"/>
                     </Grid.RowDefinitions>
-                    <TextBlock Grid.Row="0" Text="ЖУРНАЛ" Foreground="#5C6474"
-                               FontSize="11" Margin="4,0,0,6"/>
-                    <TextBox Grid.Row="1" x:Name="LogBox"
-                             IsReadOnly="True" TextWrapping="Wrap"
-                             VerticalScrollBarVisibility="Auto"
-                             Background="Transparent" BorderThickness="0"
-                             Foreground="#B8BFCE"
-                             FontFamily="Cascadia Mono, Consolas" FontSize="12"/>
+                    <TextBlock Grid.Row="0" Text="ТЕРМІНАЛ"
+                               Foreground="{StaticResource MaterialDesignBodyLight}"
+                               FontSize="10" LetterSpacing="2" Margin="8,6,0,4"/>
+                    <RichTextBox Grid.Row="1" x:Name="LogBox"
+                                 IsReadOnly="True"
+                                 VerticalScrollBarVisibility="Auto"
+                                 Background="Transparent" BorderThickness="0"
+                                 FontFamily="Consolas" FontSize="12"
+                                 Foreground="{StaticResource TerminalForeground}">
+                        <FlowDocument x:Name="LogDocument" PagePadding="6,0"
+                                      FontFamily="Consolas" FontSize="12"/>
+                    </RichTextBox>
                 </Grid>
             </Border>
         </Grid>
 
-        <!-- Низ: статус + кнопки -->
-        <Grid Grid.Row="3" Margin="0,14,0,0">
+        <!-- ── Нижня панель: прогрес, кнопки ── -->
+        <Grid Grid.Row="5" Margin="0,14,0,0">
             <Grid.ColumnDefinitions>
+                <ColumnDefinition Width="Auto"/>
                 <ColumnDefinition Width="*"/>
                 <ColumnDefinition Width="Auto"/>
             </Grid.ColumnDefinitions>
-            <TextBlock x:Name="BottomStatus" Grid.Column="0"
-                       Foreground="#8A93A6" VerticalAlignment="Center" TextWrapping="Wrap"/>
-            <StackPanel Grid.Column="1" Orientation="Horizontal">
-                <Button x:Name="RebootButton" Content="Перезавантажити"
-                        Width="140" Padding="0,8" Margin="0,0,10,0"
-                        Background="#232733" Foreground="#E8EAF0" BorderBrush="#3A4050"
-                        Visibility="Collapsed" Click="OnReboot"/>
-                <Button x:Name="RunButton" Content="Запустити захист"
-                        Width="170" Padding="0,8" FontWeight="SemiBold"
-                        Background="#3563C4" Foreground="White" BorderBrush="#3563C4"
-                        Click="OnRun"/>
+
+            <!-- Індикатор прогресу -->
+            <ProgressBar Grid.Column="0" x:Name="RunProgress"
+                         Style="{StaticResource MaterialDesignLinearProgressBar}"
+                         IsIndeterminate="False" Visibility="Collapsed"
+                         Width="200" VerticalAlignment="Center" Margin="0,0,12,0"/>
+
+            <TextBlock x:Name="BottomStatus" Grid.Column="1"
+                       Foreground="{StaticResource MaterialDesignBodyLight}"
+                       VerticalAlignment="Center" TextWrapping="Wrap"
+                       FontSize="12"/>
+
+            <StackPanel Grid.Column="2" Orientation="Horizontal">
+                <Button x:Name="RebootButton"
+                        Style="{StaticResource MaterialDesignFlatButton}"
+                        Content="ПЕРЕЗАВАНТАЖИТИ"
+                        Foreground="{StaticResource MaterialDesignBodyLight}"
+                        Visibility="Collapsed" Click="OnReboot"
+                        Margin="0,0,10,0"/>
+                <Button x:Name="RunButton"
+                        Style="{StaticResource MaterialDesignFloatingActionButton}"
+                        ToolTip="Запустити захист"
+                        Width="56" Height="56"
+                        Click="OnRun">
+                    <materialDesign:PackIcon Kind="ShieldCheck" Width="28" Height="28"/>
+                </Button>
             </StackPanel>
         </Grid>
     </Grid>

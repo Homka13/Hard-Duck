@@ -12,7 +12,12 @@
     <ApplicationManifest>app.manifest</ApplicationManifest>
     <Version>1.0.15</Version>
     <Product>Hard-Duck — Захист робочої станції</Product>
-    <Description>BitLocker (TPM+PIN), ескроу ключів в Entra ID, гібернація, BIOS-пароль (Lenovo), Windows LAPS, Nosuha ZTP</Description>
+    <Description>BitLocker (TPM+PIN), ескроу ключів в Infisical, гібернація, BIOS-пароль (Lenovo), Windows LAPS, Nosuha ZTP</Description>
   </PropertyGroup>
+
+  <ItemGroup>
+    <PackageReference Include="MaterialDesignThemes" Version="5.1.0" />
+    <PackageReference Include="MaterialDesignColors" Version="3.0.0" />
+  </ItemGroup>
 
 </Project>

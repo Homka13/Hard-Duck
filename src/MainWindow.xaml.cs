@@ -2,6 +2,7 @@ using System.Collections.ObjectModel;
 using System.Diagnostics;
 using System.Net.Http;
 using System.Windows;
+using System.Windows.Documents;
 
 namespace HardDuck;
 
@@ -75,7 +76,20 @@ public partial class MainWindow : Window
 
     private void Log(string line) => Dispatcher.Invoke(() =>
     {
-        LogBox.AppendText(line + Environment.NewLine);
+        var para = new Paragraph { Margin = new Thickness(0) };
+        Brush brush = line switch
+        {
+            _ when line.StartsWith("[OK]")    => (Brush)FindResource("StatusOkBrush"),
+            _ when line.StartsWith("[X]")     => (Brush)FindResource("StatusFailBrush"),
+            _ when line.StartsWith("[!]")     => (Brush)FindResource("StatusWarnBrush"),
+            _ when line.StartsWith("[i]")     => (Brush)FindResource("StatusInfoBrush"),
+            _ when line.StartsWith("[INFO]")  => (Brush)FindResource("StatusInfoBrush"),
+            _ when line.StartsWith("[WARNING]") => (Brush)FindResource("StatusWarnBrush"),
+            _ when line.StartsWith("[ERROR]") => (Brush)FindResource("StatusFailBrush"),
+            _ => (Brush)FindResource("TerminalForeground")
+        };
+        para.Inlines.Add(new Run(line) { Foreground = brush });
+        LogDocument.Blocks.Add(para);
         LogBox.ScrollToEnd();
     });
 
@@ -108,15 +122,19 @@ public partial class MainWindow : Window
     private async void OnRun(object sender, RoutedEventArgs e)
     {
         RunButton.IsEnabled = false;
-        SecureBootCheck.IsEnabled = false;
-        LapsCheck.IsEnabled = false;
-        UsbCheck.IsEnabled = false;
-        BiosCheck.IsEnabled = false;
-        BitLockerPinCheck.IsEnabled = false;
-        NosuhaCheck.IsEnabled = false;
+        SecureBootToggle.IsEnabled = false;
+        LapsToggle.IsEnabled = false;
+        UsbToggle.IsEnabled = false;
+        BiosToggle.IsEnabled = false;
+        BitLockerPinToggle.IsEnabled = false;
+        NosuhaToggle.IsEnabled = false;
         RebootButton.Visibility = Visibility.Collapsed;
-        LogBox.Clear();
+        LogBox.Document.Blocks.Clear();
         foreach (var s in _stages) { s.Status = StageStatus.Pending; s.Summary = "очікує"; }
+
+        // Показати індикатор прогресу
+        RunProgress.IsIndeterminate = true;
+        RunProgress.Visibility = Visibility.Visible;
 
         var report = new Dictionary<string, string>
         {
@@ -129,7 +147,7 @@ public partial class MainWindow : Window
             bool aborted = false;
 
             // ── Критичні перевірки ──
-            if (SecureBootCheck.IsChecked == true)
+            if (SecureBootToggle.IsChecked == true)
             {
                 var sb = await RunStageAsync("SecureBoot", Scripts.SecureBoot);
                 report["SecureBoot"] = sb.Summary;
@@ -151,7 +169,7 @@ public partial class MainWindow : Window
             // ── BitLocker ──
             if (!aborted)
             {
-                bool wantPin = BitLockerPinCheck.IsChecked == true;
+                bool wantPin = BitLockerPinToggle.IsChecked == true;
                 // "TPM" — сентинел для скрипту (без PIN). Якщо PIN потрібен, тут будь-яке
                 // непорожнє значення != "TPM"; реальний PIN підставляється нижче лише коли
                 // його справді бракує — інакше скрипт сам розпізнає вже існуючий TpmPin-протектор.
@@ -191,7 +209,7 @@ public partial class MainWindow : Window
                 var hib = await RunStageAsync("Hibernation", Scripts.Hibernation);
                 report["Hibernation"] = hib.Summary;
 
-                if (UsbCheck.IsChecked == true)
+                if (UsbToggle.IsChecked == true)
                 {
                     var usb = await RunStageAsync("UsbStorage", Scripts.UsbStorage);
                     report["UsbStorage"] = usb.Summary;
@@ -202,7 +220,7 @@ public partial class MainWindow : Window
                     report["UsbStorage"] = "SKIP - вимкнено оператором";
                 }
 
-                if (BiosCheck.IsChecked == true)
+                if (BiosToggle.IsChecked == true)
                 {
                     var bios = await RunStageAsync("BiosPassword", Scripts.BiosPassword);
                     report["BiosPassword"] = bios.Summary;
@@ -213,7 +231,7 @@ public partial class MainWindow : Window
                     report["BiosPassword"] = "SKIP - вимкнено оператором";
                 }
 
-                if (LapsCheck.IsChecked == true)
+                if (LapsToggle.IsChecked == true)
                 {
                     var laps = await RunStageAsync("LAPS", Scripts.Laps);
                     report["LAPS"] = laps.Summary;
@@ -225,7 +243,7 @@ public partial class MainWindow : Window
                 }
 
                 // ── Nosuha: завантажити nosuha.ps1 з GitHub, виконати, прибрати за собою ──
-                if (NosuhaCheck.IsChecked == true)
+                if (NosuhaToggle.IsChecked == true)
                 {
                     SetStage("Nosuha", StageStatus.Running, "завантаження скрипта…");
                     Log("── Nosuha: завантаження nosuha.ps1 з GitHub ──");
@@ -291,14 +309,16 @@ public partial class MainWindow : Window
         }
         finally
         {
+            RunProgress.IsIndeterminate = false;
+            RunProgress.Visibility = Visibility.Collapsed;
             RunButton.IsEnabled = true;
             RunButton.Content = "Запустити повторно";
-            SecureBootCheck.IsEnabled = true;
-            LapsCheck.IsEnabled = true;
-            UsbCheck.IsEnabled = true;
-            BiosCheck.IsEnabled = true;
-            BitLockerPinCheck.IsEnabled = true;
-            NosuhaCheck.IsEnabled = true;
+            SecureBootToggle.IsEnabled = true;
+            LapsToggle.IsEnabled = true;
+            UsbToggle.IsEnabled = true;
+            BiosToggle.IsEnabled = true;
+            BitLockerPinToggle.IsEnabled = true;
+            NosuhaToggle.IsEnabled = true;
         }
     }
 
@@ -317,12 +337,12 @@ public partial class MainWindow : Window
 
             // ── Зібрати аргументи зі стану чекбоксів UI ──
             var argList = new List<string>();
-            if (SecureBootCheck.IsChecked == true) argList.Add("-EnableSecureBoot");
-            if (UsbCheck.IsChecked == true) argList.Add("-DisableUSB");
-            if (BiosCheck.IsChecked == true) argList.Add("-EnableBIOSPassword");
-            if (BitLockerPinCheck.IsChecked == true) argList.Add("-EnableBitLockerPIN");
-            if (LapsCheck.IsChecked == true) argList.Add("-EnableLAPS");
-            if (NosuhaCheck.IsChecked == true) argList.Add("-EnableNosuhaAdmin");
+            if (SecureBootToggle.IsChecked == true) argList.Add("-EnableSecureBoot");
+            if (UsbToggle.IsChecked == true) argList.Add("-DisableUSB");
+            if (BiosToggle.IsChecked == true) argList.Add("-EnableBIOSPassword");
+            if (BitLockerPinToggle.IsChecked == true) argList.Add("-EnableBitLockerPIN");
+            if (LapsToggle.IsChecked == true) argList.Add("-EnableLAPS");
+            if (NosuhaToggle.IsChecked == true) argList.Add("-EnableNosuhaAdmin");
             var extraArgs = string.Join(" ", argList);
 
             // ── Виконати завантажений скрипт ──
@@ -356,6 +376,11 @@ public partial class MainWindow : Window
             // ── Очищення: видалити тимчасовий файл ──
             try { File.Delete(scriptPath); } catch { /* ignore */ }
         }
+    }
+
+    private void OnToggleChanged(object sender, RoutedEventArgs e)
+    {
+        // no-op — стан чекбоксів зчитується безпосередньо при запуску
     }
 
     private void OnReboot(object sender, RoutedEventArgs e)
