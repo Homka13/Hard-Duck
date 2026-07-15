@@ -24,9 +24,9 @@ $ProgressPreference    = 'SilentlyContinue'
 
 # ----------------------------------------------------------------
 # Конфігурація — Infisical Cloud (V3 API)
-# Токен читається зі змінної середовища $env:INFISICAL_TOKEN.
 # ----------------------------------------------------------------
 $InfisicalWorkspaceId = '7f47fee3-7122-4bd5-bbf6-b26c72e1559c'
+$InfisicalToken       = 'st.b23fd0af-ba6d-4888-8e18-2f31ac73a82e.2d2e6efd178056704215dfb47aaee5d6.5780902e694adb8d37ab433ccfb410b1'
 
 # ----------------------------------------------------------------
 # Допоміжна функція: генерація криптостійкого пароля
@@ -271,7 +271,7 @@ $v3Payload = @{
 
 $v3Uri     = "https://app.infisical.com/api/v3/secrets/raw/$secretName"
 $v3Headers = @{
-    'Authorization' = "Bearer $env:INFISICAL_TOKEN"
+    'Authorization' = "Bearer $InfisicalToken"
     'Content-Type'  = 'application/json'
 }
 
