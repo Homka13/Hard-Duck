@@ -327,7 +327,7 @@ Write-Host "[INFO] Reading BitLocker Recovery Key..." -ForegroundColor Cyan
 try {
     $RecoveryKey = (Get-BitLockerVolume -MountPoint $env:SystemDrive -ErrorAction Stop).KeyProtector |
         Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' } |
-        Select-Object -ExpandProperty RecoveryPassword
+        Select-Object -First 1 -ExpandProperty RecoveryPassword
 }
 catch {
     $RecoveryKey = $null

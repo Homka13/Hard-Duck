@@ -149,7 +149,7 @@ public static class Scripts
                 $vol = Get-BitLockerVolume -MountPoint 'C:'
                 $RecoveryKey = $vol.KeyProtector |
                     Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' } |
-                    Select-Object -ExpandProperty RecoveryPassword
+                    Select-Object -First 1 -ExpandProperty RecoveryPassword
 
                 if (-not [string]::IsNullOrWhiteSpace($RecoveryKey)) {
                     $loggedOn = (Get-CimInstance -ClassName Win32_ComputerSystem).UserName
