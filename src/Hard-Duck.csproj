@@ -11,7 +11,7 @@
     <RootNamespace>HardDuck</RootNamespace>
     <AssemblyName>Hard-Duck</AssemblyName>
     <ApplicationManifest>app.manifest</ApplicationManifest>
-    <Version>1.0.17</Version>
+    <Version>1.0.18</Version>
     <Product>Hard-Duck — Захист робочої станції</Product>
     <Description>BitLocker (TPM+PIN), ескроу ключів в Infisical, гібернація, BIOS-пароль (Lenovo), Windows LAPS, Hard-Duck ZTP</Description>
   </PropertyGroup>

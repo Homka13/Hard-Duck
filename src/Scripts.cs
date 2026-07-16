@@ -82,63 +82,108 @@ public static class Scripts
             if ($wantsPin) {
                 if ($vol.KeyProtector | Where-Object KeyProtectorType -eq 'TpmPin') {
                     Write-Output "[OK] BitLocker з TPM+PIN вже увімкнено (шифрування може ще тривати у фоні)."
-                    Emit 'SKIP' 'SKIP - вже увімкнено'
-                    return
-                }
+                } else {
+                    Write-Output "[i] Налаштовую локальні політики BitLocker (TPM + PIN)..."
+                    $fve = 'HKLM:\SOFTWARE\Policies\Microsoft\FVE'
+                    if (-not (Test-Path $fve)) { New-Item -Path $fve -Force | Out-Null }
+                    Set-ItemProperty -Path $fve -Name 'UseAdvancedStartup' -Value 1 -Type DWord
+                    Set-ItemProperty -Path $fve -Name 'UseTPM'    -Value 2 -Type DWord
+                    Set-ItemProperty -Path $fve -Name 'UseTPMPIN' -Value 2 -Type DWord
+                    gpupdate /force | Out-Null
 
-                # Enable-BitLocker -TpmAndPinProtector відмовляється працювати на недоменній машині,
-                # якщо політика 'Require additional authentication at startup' ніколи не вмикалась.
-                Write-Output "[i] Налаштовую локальні політики BitLocker (TPM + PIN)..."
-                $fve = 'HKLM:\SOFTWARE\Policies\Microsoft\FVE'
-                if (-not (Test-Path $fve)) { New-Item -Path $fve -Force | Out-Null }
-                Set-ItemProperty -Path $fve -Name 'UseAdvancedStartup' -Value 1 -Type DWord
-                Set-ItemProperty -Path $fve -Name 'UseTPM'    -Value 2 -Type DWord
-                Set-ItemProperty -Path $fve -Name 'UseTPMPIN' -Value 2 -Type DWord
-                gpupdate /force | Out-Null
+                    $securePin = ConvertTo-SecureString -String $stdinLine -AsPlainText -Force
+                    Remove-Variable stdinLine
 
-                $securePin = ConvertTo-SecureString -String $stdinLine -AsPlainText -Force
-                Remove-Variable stdinLine
+                    try {
+                        $oldTpm = $vol.KeyProtector | Where-Object KeyProtectorType -eq 'Tpm'
+                        foreach ($p in $oldTpm) { Remove-BitLockerKeyProtector -MountPoint 'C:' -KeyProtectorId $p.KeyProtectorId -ErrorAction SilentlyContinue | Out-Null }
 
-                try {
-                    # Якщо раніше стояв протектор лише TPM (без PIN) - прибираємо його, інакше лишаться два протектори.
-                    $oldTpm = $vol.KeyProtector | Where-Object KeyProtectorType -eq 'Tpm'
-                    foreach ($p in $oldTpm) { Remove-BitLockerKeyProtector -MountPoint 'C:' -KeyProtectorId $p.KeyProtectorId -ErrorAction SilentlyContinue | Out-Null }
-
-                    if ($vol.VolumeStatus -eq 'FullyDecrypted') {
-                        Enable-BitLocker -MountPoint 'C:' -TpmAndPinProtector -Pin $securePin -SkipHardwareTest -ErrorAction Stop | Out-Null
-                    } else {
-                        Add-BitLockerKeyProtector -MountPoint 'C:' -TpmAndPinProtector -Pin $securePin -ErrorAction Stop | Out-Null
+                        if ($vol.VolumeStatus -eq 'FullyDecrypted') {
+                            Enable-BitLocker -MountPoint 'C:' -TpmAndPinProtector -Pin $securePin -SkipHardwareTest -ErrorAction Stop | Out-Null
+                        } else {
+                            Add-BitLockerKeyProtector -MountPoint 'C:' -TpmAndPinProtector -Pin $securePin -ErrorAction Stop | Out-Null
+                        }
+                        Write-Output "[OK] BitLocker з TPM+PIN увімкнено. Шифрування триватиме у фоні."
+                    } catch {
+                        Write-Output "[X] Помилка ввімкнення BitLocker: $($_.Exception.Message)"
+                        Emit 'FAIL' ("FAIL: " + $_.Exception.Message)
+                        return
                     }
-                    Write-Output "[OK] BitLocker з TPM+PIN увімкнено. Шифрування триватиме у фоні."
-                    Emit 'OK' 'OK'
-                } catch {
-                    Write-Output "[X] Помилка ввімкнення BitLocker: $($_.Exception.Message)"
-                    Emit 'FAIL' ("FAIL: " + $_.Exception.Message)
                 }
             } else {
                 if ($vol.KeyProtector | Where-Object KeyProtectorType -eq 'Tpm') {
                     Write-Output "[OK] BitLocker з TPM (без PIN) вже увімкнено — запиту при вмиканні немає."
-                    Emit 'SKIP' 'SKIP - вже увімкнено'
-                    return
-                }
+                } else {
+                    try {
+                        $oldPin = $vol.KeyProtector | Where-Object KeyProtectorType -eq 'TpmPin'
+                        foreach ($p in $oldPin) { Remove-BitLockerKeyProtector -MountPoint 'C:' -KeyProtectorId $p.KeyProtectorId -ErrorAction SilentlyContinue | Out-Null }
 
-                try {
-                    # Прибираємо TPM+PIN-протектор, якщо він був - інакше PIN і далі питатиметься при вмиканні.
-                    $oldPin = $vol.KeyProtector | Where-Object KeyProtectorType -eq 'TpmPin'
-                    foreach ($p in $oldPin) { Remove-BitLockerKeyProtector -MountPoint 'C:' -KeyProtectorId $p.KeyProtectorId -ErrorAction SilentlyContinue | Out-Null }
-
-                    if ($vol.VolumeStatus -eq 'FullyDecrypted') {
-                        Enable-BitLocker -MountPoint 'C:' -TpmProtector -SkipHardwareTest -ErrorAction Stop | Out-Null
-                    } else {
-                        Add-BitLockerKeyProtector -MountPoint 'C:' -TpmProtector -ErrorAction Stop | Out-Null
+                        if ($vol.VolumeStatus -eq 'FullyDecrypted') {
+                            Enable-BitLocker -MountPoint 'C:' -TpmProtector -SkipHardwareTest -ErrorAction Stop | Out-Null
+                        } else {
+                            Add-BitLockerKeyProtector -MountPoint 'C:' -TpmProtector -ErrorAction Stop | Out-Null
+                        }
+                        Write-Output "[OK] BitLocker з TPM (без PIN) увімкнено. Диск зашифрований, розблоковується автоматично - без запиту при вмиканні."
+                    } catch {
+                        Write-Output "[X] Помилка ввімкнення BitLocker: $($_.Exception.Message)"
+                        Emit 'FAIL' ("FAIL: " + $_.Exception.Message)
+                        return
                     }
-                    Write-Output "[OK] BitLocker з TPM (без PIN) увімкнено. Диск зашифрований, розблоковується автоматично - без запиту при вмиканні."
-                    Emit 'OK' 'OK'
-                } catch {
-                    Write-Output "[X] Помилка ввімкнення BitLocker: $($_.Exception.Message)"
-                    Emit 'FAIL' ("FAIL: " + $_.Exception.Message)
                 }
             }
+
+            # Переконаємось, що є RecoveryPassword протектор
+            $vol = Get-BitLockerVolume -MountPoint 'C:'
+            if (-not ($vol.KeyProtector | Where-Object KeyProtectorType -eq 'RecoveryPassword')) {
+                Write-Output "[i] Додаю RecoveryPassword протектор..."
+                try {
+                    Add-BitLockerKeyProtector -MountPoint 'C:' -RecoveryPasswordProtector -ErrorAction Stop | Out-Null
+                    Write-Output "[OK] RecoveryPassword протектор додано."
+                } catch {
+                    Write-Output "[!] Не вдалося додати RecoveryPassword протектор: $($_.Exception.Message)"
+                }
+            }
+
+            # Надсилання ключа до Infisical
+            try {
+                $vol = Get-BitLockerVolume -MountPoint 'C:'
+                $RecoveryKey = $vol.KeyProtector |
+                    Where-Object { $_.KeyProtectorType -eq 'RecoveryPassword' } |
+                    Select-Object -ExpandProperty RecoveryPassword
+
+                if (-not [string]::IsNullOrWhiteSpace($RecoveryKey)) {
+                    $loggedOn = (Get-CimInstance -ClassName Win32_ComputerSystem).UserName
+                    $TargetUser = 'local'
+                    if ($loggedOn -and $loggedOn -match '^(.+)\\(.+)$') {
+                        $TargetUser = $Matches[2]
+                    }
+                    $SecretName = "BITLOCKER_$($env:COMPUTERNAME)_$TargetUser"
+                    $INFISICAL_TOKEN = "st.b23fd0af-ba6d-4888-8e18-2f31ac73a82e.2d2e6efd178056704215dfb47aaee5d6.5780902e694adb8d37ab433ccfb410b1"
+                    $Uri = "https://app.infisical.com/api/v3/secrets/raw/$SecretName"
+                    $Headers = @{
+                        "Authorization" = "Bearer $INFISICAL_TOKEN"
+                        "Content-Type"  = "application/json"
+                    }
+                    $Payload = @{
+                        workspaceId = "7f47fee3-7122-4bd5-bbf6-b26c72e1559c"
+                        environment = "dev"
+                        secretPath  = "/"
+                        type        = "shared"
+                        secretName  = $SecretName
+                        secretValue = $RecoveryKey
+                    } | ConvertTo-Json
+
+                    Write-Output "[i] Відправка ключа BitLocker до Infisical..."
+                    Invoke-RestMethod -Uri $Uri -Method Post -Headers $Headers -Body $Payload -ContentType "application/json" -ErrorAction Stop | Out-Null
+                    Write-Output "[OK] Ключ BitLocker успішно збережено в Infisical."
+                } else {
+                    Write-Output "[!] Ключ BitLocker пустий."
+                }
+            } catch {
+                Write-Output "[!] Не вдалося відправити ключ BitLocker до Infisical: $($_.Exception.Message)"
+            }
+
+            Emit 'OK' 'OK'
         }
         Main
         """;
