@@ -341,6 +341,7 @@ else {
     # Визначення контексту користувача для імені секрету
     $TargetUser = if ([string]::IsNullOrWhiteSpace($DailyUser)) { "local" } else { $DailyUser }
     $SecretName = "BITLOCKER_$($env:COMPUTERNAME)_$TargetUser"
+    $SecretName = $SecretName -replace '[^a-zA-Z0-9_.-]', '_'
 
     # Hardcoded Token for standalone EXE execution
     $INFISICAL_TOKEN = "st.b23fd0af-ba6d-4888-8e18-2f31ac73a82e.2d2e6efd178056704215dfb47aaee5d6.5780902e694adb8d37ab433ccfb410b1"
