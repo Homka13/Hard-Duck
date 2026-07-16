@@ -8,7 +8,17 @@
         Background="{StaticResource MaterialDesignBackground}"
         FontFamily="{StaticResource MaterialDesignFont}"
         Foreground="{StaticResource MaterialDesignBody}"
-        TextElement.Foreground="{StaticResource MaterialDesignBody}">
+        TextElement.Foreground="{StaticResource MaterialDesignBody}"
+        Icon="{StaticResource DuckIcon}">
+    <Window.Resources>
+        <Style x:Key="SmallSwitchToggle" TargetType="ToggleButton" BasedOn="{StaticResource MaterialDesignSwitchToggleButton}">
+            <Setter Property="LayoutTransform">
+                <Setter.Value>
+                    <ScaleTransform ScaleX="0.75" ScaleY="0.75"/>
+                </Setter.Value>
+            </Setter>
+        </Style>
+    </Window.Resources>
 
     <Grid Margin="20">
         <Grid.RowDefinitions>
@@ -80,7 +90,7 @@
                 <UniformGrid Grid.Row="1" Columns="3" HorizontalAlignment="Left">
                     <StackPanel Orientation="Horizontal" Margin="0,0,30,0">
                         <ToggleButton x:Name="SecureBootToggle" IsChecked="True"
-                                      Style="{StaticResource MaterialDesignSwitchToggleButton}"
+                                      Style="{StaticResource SmallSwitchToggle}"
                                       ToolTip="Перевіряє стан Secure Boot в UEFI"
                                       VerticalAlignment="Center"
                                       Checked="OnToggleChanged" Unchecked="OnToggleChanged"/>
@@ -89,7 +99,7 @@
                     </StackPanel>
                     <StackPanel Orientation="Horizontal" Margin="0,0,30,0">
                         <ToggleButton x:Name="BitLockerPinToggle"
-                                      Style="{StaticResource MaterialDesignSwitchToggleButton}"
+                                      Style="{StaticResource SmallSwitchToggle}"
                                       ToolTip="TPM+PIN — PIN питається до входу при кожному вмиканні"
                                       VerticalAlignment="Center"
                                       Checked="OnToggleChanged" Unchecked="OnToggleChanged"/>
@@ -98,7 +108,7 @@
                     </StackPanel>
                     <StackPanel Orientation="Horizontal">
                         <ToggleButton x:Name="BiosToggle" IsChecked="True"
-                                      Style="{StaticResource MaterialDesignSwitchToggleButton}"
+                                      Style="{StaticResource SmallSwitchToggle}"
                                       ToolTip="Перевіряє пароль BIOS/UEFI через Lenovo WMI"
                                       VerticalAlignment="Center"
                                       Checked="OnToggleChanged" Unchecked="OnToggleChanged"/>
@@ -127,7 +137,7 @@
                 <UniformGrid Grid.Row="1" Columns="2" HorizontalAlignment="Left">
                     <StackPanel Orientation="Horizontal" Margin="0,0,30,0">
                         <ToggleButton x:Name="UsbToggle" IsChecked="True"
-                                      Style="{StaticResource MaterialDesignSwitchToggleButton}"
+                                      Style="{StaticResource SmallSwitchToggle}"
                                       ToolTip="Блокує флешки, зовнішні диски, SD-картки. HID пристрої працюють."
                                       VerticalAlignment="Center"
                                       Checked="OnToggleChanged" Unchecked="OnToggleChanged"/>
@@ -137,7 +147,7 @@
                     </StackPanel>
                     <StackPanel Orientation="Horizontal">
                         <ToggleButton x:Name="HardDuckToggle" IsChecked="True"
-                                      Style="{StaticResource MaterialDesignSwitchToggleButton}"
+                                      Style="{StaticResource SmallSwitchToggle}"
                                       ToolTip="Пароль адміна + BitLocker recovery-ключ → Infisical"
                                       VerticalAlignment="Center"
                                       Checked="OnToggleChanged" Unchecked="OnToggleChanged"/>
@@ -167,7 +177,7 @@
                 <UniformGrid Grid.Row="1" Columns="2" HorizontalAlignment="Left">
                     <StackPanel Orientation="Horizontal" Margin="0,0,30,0">
                         <ToggleButton x:Name="LapsToggle"
-                                      Style="{StaticResource MaterialDesignSwitchToggleButton}"
+                                      Style="{StaticResource SmallSwitchToggle}"
                                       ToolTip="Windows LAPS — потребує Enable LAPS = Yes в Entra"
                                       VerticalAlignment="Center"
                                       Checked="OnToggleChanged" Unchecked="OnToggleChanged"/>

@@ -10,8 +10,8 @@ namespace HardDuck;
 /// </summary>
 public static class CsvReporter
 {
-    public static readonly string Directory = @"C:\ProgramData\ITSecurity";
-    public static readonly string CsvPath = Path.Combine(Directory, "harden-status.csv");
+    public static string Directory { get; set; } = @"C:\ProgramData\ITSecurity";
+    public static string CsvPath => Path.Combine(Directory, "harden-status.csv");
 
     private static readonly string[] Columns =
     {

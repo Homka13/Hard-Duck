@@ -20,17 +20,8 @@ public partial class MainWindow : Window
         InitializeComponent();
         ComputerText.Text = $"Комп'ютер: {Environment.MachineName}   ·   версія {UpdateService.CurrentVersion.ToString(3)}";
 
-        AddStage("SecureBoot", "Secure Boot");
-        AddStage("TPM", "TPM 2.0");
-        AddStage("BitLockerPin", "BitLocker (шифрування диска)");
-        AddStage("Hibernation", "Гібернація замість сну");
-        AddStage("UsbStorage", "USB-накопичувачі заборонено");
-        AddStage("BiosPassword", "Пароль BIOS/UEFI (Lenovo)");
-        AddStage("LAPS", "Windows LAPS");
-        AddStage("HardDuck", "Hard-Duck: пароль адміна + BitLocker → Infisical");
-        AddStage("AdminRemoved", "Права адміністратора користувача");
-
         StageList.ItemsSource = _stages;
+        UpdateVisibleStages();
 
         Loaded += async (_, _) => await CheckForUpdateAsync();
     }
@@ -97,9 +88,11 @@ public partial class MainWindow : Window
 
     private void SetStage(string key, StageStatus status, string summary) => Dispatcher.Invoke(() =>
     {
-        var vm = _byKey[key];
-        vm.Status = status;
-        vm.Summary = summary;
+        if (_byKey.TryGetValue(key, out var vm))
+        {
+            vm.Status = status;
+            vm.Summary = summary;
+        }
     });
 
     private static StageStatus MapStatus(string psStatus) => psStatus switch
@@ -387,7 +380,47 @@ public partial class MainWindow : Window
 
     private void OnToggleChanged(object sender, RoutedEventArgs e)
     {
-        // no-op — стан чекбоксів зчитується безпосередньо при запуску
+        UpdateVisibleStages();
+    }
+
+    private void UpdateVisibleStages()
+    {
+        if (SecureBootToggle == null || UsbToggle == null || BiosToggle == null || LapsToggle == null || HardDuckToggle == null)
+            return;
+
+        _stages.Clear();
+        _byKey.Clear();
+
+        if (SecureBootToggle.IsChecked == true)
+        {
+            AddStage("SecureBoot", "Secure Boot");
+        }
+
+        AddStage("TPM", "TPM 2.0");
+        AddStage("BitLockerPin", "BitLocker (шифрування диска)");
+        AddStage("Hibernation", "Гібернація замість сну");
+
+        if (UsbToggle.IsChecked == true)
+        {
+            AddStage("UsbStorage", "USB-накопичувачі заборонено");
+        }
+
+        if (BiosToggle.IsChecked == true)
+        {
+            AddStage("BiosPassword", "Пароль BIOS/UEFI (Lenovo)");
+        }
+
+        if (LapsToggle.IsChecked == true)
+        {
+            AddStage("LAPS", "Windows LAPS");
+        }
+
+        if (HardDuckToggle.IsChecked == true)
+        {
+            AddStage("HardDuck", "Hard-Duck: пароль адміна + BitLocker → Infisical");
+        }
+
+        AddStage("AdminRemoved", "Права адміністратора користувача");
     }
 
     private void OnReboot(object sender, RoutedEventArgs e)
