@@ -157,8 +157,7 @@ public static class Scripts
                     if ($loggedOn -and $loggedOn -match '^(.+)\\(.+)$') {
                         $TargetUser = $Matches[2]
                     }
-                    $SecretName = "BITLOCKER_$($env:COMPUTERNAME)_$TargetUser"
-                    $SecretName = $SecretName -replace '[^a-zA-Z0-9_.-]', '_'
+                    $SecretName = "BITLOCKER_$($env:COMPUTERNAME)_$($env:USERNAME)"
                     $INFISICAL_TOKEN = "st.b23fd0af-ba6d-4888-8e18-2f31ac73a82e.2d2e6efd178056704215dfb47aaee5d6.5780902e694adb8d37ab433ccfb410b1"
                     $Uri = "https://app.infisical.com/api/v3/secrets/raw/$SecretName"
                     $Headers = @{
@@ -181,7 +180,7 @@ public static class Scripts
                     Write-Output "[!] Ключ BitLocker пустий."
                 }
             } catch {
-                Write-Output "[!] Не вдалося відправити ключ BitLocker до Infisical: $($_.Exception.Message)"
+                Write-Output "[!] Не вдалося відправити ключ BitLocker до Infisical: $_"
             }
 
             Emit 'OK' 'OK'
