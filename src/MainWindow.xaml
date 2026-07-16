@@ -59,17 +59,33 @@
                                FontSize="12" Margin="0,2,0,0"/>
                 </StackPanel>
             </StackPanel>
-            <Button x:Name="UpdateButton" Grid.Column="1"
-                    Style="{StaticResource MaterialDesignFlatButton}"
-                    Visibility="Collapsed" VerticalAlignment="Top"
-                    Foreground="{StaticResource StatusOkBrush}"
-                    Click="OnUpdate">
-                <StackPanel Orientation="Horizontal">
-                    <materialDesign:PackIcon Kind="Download" Width="16" Height="16"
-                                             VerticalAlignment="Center" Margin="0,0,6,0"/>
-                    <TextBlock Text="ОНОВИТИ"/>
+            <StackPanel Grid.Column="1" Orientation="Horizontal" VerticalAlignment="Top">
+                <Button x:Name="UpdateButton"
+                        Style="{StaticResource MaterialDesignFlatButton}"
+                        Visibility="Collapsed"
+                        Foreground="{StaticResource StatusOkBrush}"
+                        Click="OnUpdate"
+                        Margin="0,0,16,0">
+                    <StackPanel Orientation="Horizontal">
+                        <materialDesign:PackIcon Kind="Download" Width="16" Height="16"
+                                                 VerticalAlignment="Center" Margin="0,0,6,0"/>
+                        <TextBlock Text="ОНОВИТИ"/>
+                    </StackPanel>
+                </Button>
+
+                <StackPanel Orientation="Horizontal" VerticalAlignment="Center">
+                    <TextBlock Text="Захист" VerticalAlignment="Center"
+                               Foreground="{StaticResource MaterialDesignBodyLight}" FontSize="12"/>
+                    <ToggleButton x:Name="RollbackToggle"
+                                  Style="{StaticResource SmallSwitchToggle}"
+                                  Margin="8,0"
+                                  Checked="OnModeChanged" Unchecked="OnModeChanged"/>
+                    <TextBlock Text="Відкат" VerticalAlignment="Center"
+                               Foreground="{StaticResource MaterialDesignBodyLight}" FontSize="12"/>
                 </StackPanel>
-            </Button>
+            </StackPanel>
+            
+            <!-- Spacer to push content down -->
         </Grid>
 
         <!-- ── Картка 1: Апаратна безпека ── -->

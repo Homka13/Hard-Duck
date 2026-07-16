@@ -572,4 +572,158 @@ public static class Scripts
         }
         Main
         """;
+
+    public const string BitLockerDecrypt = Prolog + """
+        function Main {
+            Import-Module BitLocker -ErrorAction SilentlyContinue
+            try {
+                $vol = Get-BitLockerVolume -MountPoint 'C:'
+                if ($vol.VolumeStatus -eq 'FullyDecrypted') {
+                    Write-Output "[OK] Диск C: вже повністю розшифровано."
+                    Emit 'SKIP' 'SKIP - вже розшифровано'
+                    return
+                }
+                
+                Write-Output "[i] Запускаю процес дешифрування диска C:..."
+                Disable-BitLocker -MountPoint 'C:' -ErrorAction Stop | Out-Null
+                Write-Output "[OK] Процес дешифрування запущено. Він триватиме у фоні ОС."
+                Emit 'OK' 'OK'
+            } catch {
+                Write-Output "[X] Помилка відключення BitLocker: $($_.Exception.Message)"
+                Emit 'FAIL' ("FAIL: " + $_.Exception.Message)
+            }
+        }
+        Main
+        """;
+
+    public const string HibernationRollback = Prolog + """
+        function Main {
+            try {
+                # Повертаємо стандартний режим сну (standby) замість гібернації
+                powercfg /change standby-timeout-ac 30 | Out-Null
+                powercfg /change standby-timeout-dc 15 | Out-Null
+                powercfg /change hibernate-timeout-ac 0 | Out-Null
+                powercfg /change hibernate-timeout-dc 0 | Out-Null
+                
+                $SUB_BUTTONS = '4f971e89-eebd-4455-a8de-9e59040e7347'
+                $LID_ACTION  = '5ca83367-6e45-459f-a27b-476b1d01c936'
+                # 1 = Sleep (Сон), 2 = Hibernate (Гібернація)
+                powercfg /setacvalueindex scheme_current $SUB_BUTTONS $LID_ACTION 1 | Out-Null
+                powercfg /setdcvalueindex scheme_current $SUB_BUTTONS $LID_ACTION 1 | Out-Null
+                powercfg /setactive scheme_current | Out-Null
+                
+                Write-Output "[OK] Стандартний сон та дію при закритті кришки відновлено."
+                Emit 'OK' 'OK'
+            } catch {
+                Write-Output "[X] Помилка відновлення режиму сну: $($_.Exception.Message)"
+                Emit 'FAIL' ("FAIL: " + $_.Exception.Message)
+            }
+        }
+        Main
+        """;
+
+    public const string UsbStorageRollback = Prolog + """
+        function Main {
+            try {
+                # 1. Драйвер USB mass storage: 3 = увімкнено (дозволено)
+                Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\USBSTOR' -Name 'Start' -Value 3 -Type DWord -Force | Out-Null
+                Write-Output "[OK] Драйвер USBSTOR увімкнено (USB-флешки дозволені)."
+
+                if (Test-Path 'HKLM:\SYSTEM\CurrentControlSet\Services\UASPStor') {
+                    Set-ItemProperty -Path 'HKLM:\SYSTEM\CurrentControlSet\Services\UASPStor' -Name 'Start' -Value 3 -Type DWord -Force | Out-Null
+                    Write-Output "[OK] Драйвер UASPStor увімкнено (дозволено UASP SSD-бокси)."
+                }
+
+                # 2. Видалення політик Removable Storage Access
+                $base = 'HKLM:\SOFTWARE\Policies\Microsoft\Windows\RemovableStorageDevices'
+                if (Test-Path $base) {
+                    Remove-Item -Path $base -Recurse -Force | Out-Null
+                    Write-Output "[OK] Групові політики блокування знімних дисків видалено."
+                }
+                
+                Emit 'OK' 'OK'
+            } catch {
+                Write-Output "[X] Помилка відновлення доступу до USB: $($_.Exception.Message)"
+                Emit 'FAIL' ("FAIL: " + $_.Exception.Message)
+            }
+        }
+        Main
+        """;
+
+    public const string LapsRollback = Prolog + """
+        function Main {
+            try {
+                $lapsPol = 'HKLM:\SOFTWARE\Policies\Microsoft Services\AdmPwd'
+                if (Test-Path $lapsPol) {
+                    Set-ItemProperty -Path $lapsPol -Name 'AdmPwdEnabled' -Value 0 -Type DWord -Force | Out-Null
+                    Write-Output "[OK] Політику Windows LAPS вимкнено в реєстрі (AdmPwdEnabled = 0)."
+                } else {
+                    Write-Output "[OK] Політика Windows LAPS вже відсутня/вимкнена."
+                }
+                Emit 'OK' 'OK'
+            } catch {
+                Write-Output "[X] Помилка вимкнення Windows LAPS: $($_.Exception.Message)"
+                Emit 'FAIL' ("FAIL: " + $_.Exception.Message)
+            }
+        }
+        Main
+        """;
+
+    public const string RestoreAdminRights = Prolog + """
+        function Main {
+            $user = [Console]::In.ReadLine()
+            if ([string]::IsNullOrWhiteSpace($user)) {
+                Write-Output "[X] Помилка: Ім'я користувача не передано."
+                Emit 'FAIL' 'FAIL - ім`я порожнє'
+                return
+            }
+
+            try {
+                # Додаємо користувача назад до локальної групи Administrators (Адміністратори)
+                $group = 'Administrators'
+                # Врахування локалізованих назв груп в Windows
+                try {
+                    $sid = New-Object System.Security.Principal.SecurityIdentifier("S-1-5-32-544")
+                    $group = $sid.Translate([System.Security.Principal.NTAccount]).Value
+                    if ($group -match '^BUILTIN\\(.+)$') { $group = $Matches[1] }
+                } catch { }
+
+                Add-LocalGroupMember -Group $group -Member $user -ErrorAction Stop
+                Write-Output "[OK] Користувача '$user' додано назад до групи '$group'."
+                Emit 'OK' 'OK'
+            } catch {
+                # Перевіримо, чи він уже там є
+                try {
+                    $sid = New-Object System.Security.Principal.SecurityIdentifier("S-1-5-32-544")
+                    $members = Get-LocalGroupMember -SID $sid | Select-Object -ExpandProperty Name
+                    if ($members -contains $user -or $members -contains "$env:COMPUTERNAME\$user") {
+                        Write-Output "[OK] Користувач '$user' вже є членом групи '$group'."
+                        Emit 'OK' 'OK'
+                        return
+                    }
+                } catch { }
+
+                Write-Output "[X] Не вдалося додати користувача до адміністраторів: $($_.Exception.Message)"
+                Emit 'FAIL' ("FAIL: " + $_.Exception.Message)
+            }
+        }
+        Main
+        """;
+
+    public const string DisableAdmin = Prolog + """
+        function Main {
+            try {
+                $adminUser = Get-LocalUser | Where-Object { $_.SID.Value.EndsWith("-500") } | Select-Object -First 1 -ExpandProperty Name
+                if (-not $adminUser) { $adminUser = 'Administrator' }
+
+                Disable-LocalUser -Name $adminUser -ErrorAction Stop
+                Write-Output "[OK] Обліковий запис '$adminUser' (RID 500) вимкнено."
+                Emit 'OK' 'OK - вимкнено'
+            } catch {
+                Write-Output "[X] Не вдалося вимкнути обліковий запис: $($_.Exception.Message)"
+                Emit 'FAIL' ("FAIL: " + $_.Exception.Message)
+            }
+        }
+        Main
+        """;
 }

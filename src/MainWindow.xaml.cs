@@ -123,6 +123,7 @@ public partial class MainWindow : Window
         BiosToggle.IsEnabled = false;
         BitLockerPinToggle.IsEnabled = false;
         HardDuckToggle.IsEnabled = false;
+        RollbackToggle.IsEnabled = false;
         RebootButton.Visibility = Visibility.Collapsed;
 
         // FAB: змінити іконку на спінер
@@ -143,6 +144,12 @@ public partial class MainWindow : Window
 
         try
         {
+            if (RollbackToggle.IsChecked == true)
+            {
+                await OnRunRollbackAsync(report);
+                return;
+            }
+
             bool aborted = false;
 
             // ── Критичні перевірки ──
@@ -310,8 +317,11 @@ public partial class MainWindow : Window
         {
             RunProgress.IsIndeterminate = false;
             RunProgress.Visibility = Visibility.Collapsed;
-            RunFabIcon.Kind = MaterialDesignThemes.Wpf.PackIconKind.ShieldCheck;
-            StatusLockIcon.Kind = MaterialDesignThemes.Wpf.PackIconKind.LockOutline;
+            
+            bool isRollback = RollbackToggle.IsChecked == true;
+            RunFabIcon.Kind = isRollback ? MaterialDesignThemes.Wpf.PackIconKind.Undo : MaterialDesignThemes.Wpf.PackIconKind.ShieldCheck;
+            StatusLockIcon.Kind = isRollback ? MaterialDesignThemes.Wpf.PackIconKind.LockOpenOutline : MaterialDesignThemes.Wpf.PackIconKind.LockOutline;
+            
             RunButton.IsEnabled = true;
             SecureBootToggle.IsEnabled = true;
             LapsToggle.IsEnabled = true;
@@ -319,6 +329,7 @@ public partial class MainWindow : Window
             BiosToggle.IsEnabled = true;
             BitLockerPinToggle.IsEnabled = true;
             HardDuckToggle.IsEnabled = true;
+            RollbackToggle.IsEnabled = true;
         }
     }
 
@@ -383,44 +394,93 @@ public partial class MainWindow : Window
         UpdateVisibleStages();
     }
 
+    private void OnModeChanged(object sender, RoutedEventArgs e)
+    {
+        if (RollbackToggle == null || RunFabIcon == null || StatusLockIcon == null || RunButton == null)
+            return;
+
+        bool isRollback = RollbackToggle.IsChecked == true;
+        if (isRollback)
+        {
+            RunFabIcon.Kind = MaterialDesignThemes.Wpf.PackIconKind.Undo;
+            RunButton.ToolTip = "Скасувати захист (Відкат)";
+            StatusLockIcon.Kind = MaterialDesignThemes.Wpf.PackIconKind.LockOpenOutline;
+        }
+        else
+        {
+            RunFabIcon.Kind = MaterialDesignThemes.Wpf.PackIconKind.ShieldCheck;
+            RunButton.ToolTip = "Запустити захист";
+            StatusLockIcon.Kind = MaterialDesignThemes.Wpf.PackIconKind.LockOutline;
+        }
+
+        UpdateVisibleStages();
+    }
+
     private void UpdateVisibleStages()
     {
-        if (SecureBootToggle == null || UsbToggle == null || BiosToggle == null || LapsToggle == null || HardDuckToggle == null)
+        if (SecureBootToggle == null || UsbToggle == null || BiosToggle == null || LapsToggle == null || HardDuckToggle == null || RollbackToggle == null)
             return;
 
         _stages.Clear();
         _byKey.Clear();
 
-        if (SecureBootToggle.IsChecked == true)
+        bool isRollback = RollbackToggle.IsChecked == true;
+
+        if (isRollback)
         {
-            AddStage("SecureBoot", "Secure Boot");
+            AddStage("BitLockerPin", "BitLocker: дешифрування диска C:");
+            AddStage("Hibernation", "Відновлення стандартного сну");
+
+            if (UsbToggle.IsChecked == true)
+            {
+                AddStage("UsbStorage", "USB-накопичувачі дозволено");
+            }
+
+            if (LapsToggle.IsChecked == true)
+            {
+                AddStage("LAPS", "Вимкнення Windows LAPS");
+            }
+
+            if (HardDuckToggle.IsChecked == true)
+            {
+                AddStage("HardDuck", "Вимкнення облікового запису Administrator");
+            }
+
+            AddStage("AdminRemoved", "Повернення прав адміністратора користувачу");
         }
-
-        AddStage("TPM", "TPM 2.0");
-        AddStage("BitLockerPin", "BitLocker (шифрування диска)");
-        AddStage("Hibernation", "Гібернація замість сну");
-
-        if (UsbToggle.IsChecked == true)
+        else
         {
-            AddStage("UsbStorage", "USB-накопичувачі заборонено");
-        }
+            if (SecureBootToggle.IsChecked == true)
+            {
+                AddStage("SecureBoot", "Secure Boot");
+            }
 
-        if (BiosToggle.IsChecked == true)
-        {
-            AddStage("BiosPassword", "Пароль BIOS/UEFI (Lenovo)");
-        }
+            AddStage("TPM", "TPM 2.0");
+            AddStage("BitLockerPin", "BitLocker (шифрування диска)");
+            AddStage("Hibernation", "Гібернація замість сну");
 
-        if (LapsToggle.IsChecked == true)
-        {
-            AddStage("LAPS", "Windows LAPS");
-        }
+            if (UsbToggle.IsChecked == true)
+            {
+                AddStage("UsbStorage", "USB-накопичувачі заборонено");
+            }
 
-        if (HardDuckToggle.IsChecked == true)
-        {
-            AddStage("HardDuck", "Hard-Duck: пароль адміна + BitLocker → Infisical");
-        }
+            if (BiosToggle.IsChecked == true)
+            {
+                AddStage("BiosPassword", "Пароль BIOS/UEFI (Lenovo)");
+            }
 
-        AddStage("AdminRemoved", "Права адміністратора користувача");
+            if (LapsToggle.IsChecked == true)
+            {
+                AddStage("LAPS", "Windows LAPS");
+            }
+
+            if (HardDuckToggle.IsChecked == true)
+            {
+                AddStage("HardDuck", "Hard-Duck: пароль адміна + BitLocker → Infisical");
+            }
+
+            AddStage("AdminRemoved", "Права адміністратора користувача");
+        }
     }
 
     private void OnReboot(object sender, RoutedEventArgs e)
@@ -434,5 +494,86 @@ public partial class MainWindow : Window
                 UseShellExecute = false,
                 CreateNoWindow = true
             });
+    }
+
+    private async Task OnRunRollbackAsync(Dictionary<string, string> report)
+    {
+        // ── BitLocker: дешифрування ──
+        var bl = await RunStageAsync("BitLockerPin", Scripts.BitLockerDecrypt);
+        report["BitLockerPin"] = bl.Summary;
+
+        if (bl.Status == "OK")
+        {
+            MessageBox.Show(this,
+                "Процес дешифрування диска C: успішно запущено.\n\n" +
+                "Увага: дешифрування відбувається асинхронно у фоні ОС і може тривати від кількох десятків хвилин до кількох годин. Ви можете продовжувати користуватися комп'ютером.",
+                "BitLocker Дешифрування", MessageBoxButton.OK, MessageBoxImage.Information);
+        }
+
+        // ── Гібернація: відновлення сну ──
+        var hib = await RunStageAsync("Hibernation", Scripts.HibernationRollback);
+        report["Hibernation"] = hib.Summary;
+
+        // ── USB: дозволити ──
+        if (UsbToggle.IsChecked == true)
+        {
+            var usb = await RunStageAsync("UsbStorage", Scripts.UsbStorageRollback);
+            report["UsbStorage"] = usb.Summary;
+        }
+        else
+        {
+            SetStage("UsbStorage", StageStatus.Skip, "SKIP - вимкнено оператором");
+            report["UsbStorage"] = "SKIP - вимкнено оператором";
+        }
+
+        // ── Windows LAPS: вимкнути ──
+        if (LapsToggle.IsChecked == true)
+        {
+            var laps = await RunStageAsync("LAPS", Scripts.LapsRollback);
+            report["LAPS"] = laps.Summary;
+        }
+        else
+        {
+            SetStage("LAPS", StageStatus.Skip, "SKIP - вимкнено оператором");
+            report["LAPS"] = "SKIP - вимкнено оператором";
+        }
+
+        // ── Hard-Duck: вимкнути Administrator account ──
+        if (HardDuckToggle.IsChecked == true)
+        {
+            var hd = await RunStageAsync("HardDuck", Scripts.DisableAdmin);
+            report["HardDuck"] = hd.Summary;
+        }
+        else
+        {
+            SetStage("HardDuck", StageStatus.Skip, "SKIP - вимкнено оператором");
+            report["HardDuck"] = "SKIP - вимкнено оператором";
+        }
+
+        // ── Зняття прав адміна: повернути користувачу ──
+        SetStage("AdminRemoved", StageStatus.Running, "визначаю користувача…");
+        var detect = await PowerShellRunner.RunAsync(Scripts.DetectDailyUser, onLogLine: Log);
+        if (detect.Status == "OK" && !string.IsNullOrWhiteSpace(detect.Summary))
+        {
+            var user = detect.Summary;
+            var rm = await RunStageAsync("AdminRemoved", Scripts.RestoreAdminRights, user);
+            report["AdminRemoved"] = rm.Summary;
+        }
+        else
+        {
+            SetStage("AdminRemoved", StageStatus.Skip, "SKIP - користувача не визначено");
+            report["AdminRemoved"] = "SKIP - користувача не визначено (local)";
+        }
+
+        // ── Підсумок і CSV ──
+        var csvPath = CsvReporter.Append(report);
+        Log("");
+        Log($"[i] Готово. Підсумок відкату дописано в {csvPath}");
+
+        var anyFail = _stages.Any(s => s.Status == StageStatus.Fail);
+        var anyWarn = _stages.Any(s => s.Status == StageStatus.Warn);
+        BottomStatus.Text = anyFail || anyWarn
+            ? "Відкат завершено з попередженнями. Звіт: " + csvPath
+            : "Усі етапи відкату виконано успішно. Звіт: " + csvPath;
     }
 }
